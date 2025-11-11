@@ -1,0 +1,52 @@
+seed: 0
+device: "cuda:0"
+dtype: double
+n_thread: 16  # for CPU-based Coal library
+
+exp: debug
+log_dir: output/${exp}
+asset_dir: examples/assets/object/DGN_5k/processed_data
+n_prob: 100
+prob_rand: 
+  - obj
+  - scale
+  - tp 
+  # - convex
+obj: 
+  - sem_Gun_8834a85c572d88802a23d93958262ccc
+  - mujoco_Perricone_MD_OVM 
+scale:
+  - 0.01
+  - 0.115
+convex: 
+  - True
+  - True
+tp: 
+  - v
+  - v
+n_tp: 1024
+tp_check: True
+
+step_r: 10.0
+step_t: 0.01
+iter: 2000
+upd1: False
+egt: True
+margin: 0.001
+
+dcd:
+  method: RS1Dist
+  sample: "adp"
+  enable_debug: ${vis}
+  egt: ${egt}
+  egt_step_r: ${step_r}
+  egt_step_t: ${step_t}
+  n_thread: ${n_thread}
+
+vis: False
+vis_sample: False
+
+
+hydra:
+  run:
+    dir: ${log_dir}

@@ -1,0 +1,14 @@
+python examples/main.py exp=lr1_FDBest_objv_cx 'convex=[True, True]' step_r=1 step_t=0.001 dcd.method=FD asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128
+python examples/main.py exp=lr2_FDBest_objv_cx 'convex=[True, True]' step_r=2 step_t=0.002 dcd.method=FD asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128
+python examples/main.py exp=lr5_FDBest_objv_cx 'convex=[True, True]' step_r=5 step_t=0.005 dcd.method=FD asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128
+python examples/main.py exp=lr10_FDBest_objv_cx 'convex=[True, True]' step_r=10 step_t=0.01 dcd.method=FD asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128
+python examples/main.py exp=lr20_FDBest_objv_cx 'convex=[True, True]' step_r=20 step_t=0.02 dcd.method=FD asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128
+python examples/main.py exp=lr50_FDBest_objv_cx 'convex=[True, True]' step_r=50 step_t=0.05 dcd.method=FD asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128
+python examples/main.py exp=lr100_FDBest_objv_cx 'convex=[True, True]' step_r=100 step_t=0.1 dcd.method=FD asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128
+python examples/main.py exp=lr1_FDBest_objv_cc 'convex=[False, False]' step_r=1 step_t=0.001 dcd.method=FD asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128
+python examples/main.py exp=lr2_FDBest_objv_cc 'convex=[False, False]' step_r=2 step_t=0.002 dcd.method=FD asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128
+python examples/main.py exp=lr5_FDBest_objv_cc 'convex=[False, False]' step_r=5 step_t=0.005 dcd.method=FD asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128
+python examples/main.py exp=lr10_FDBest_objv_cc 'convex=[False, False]' step_r=10 step_t=0.01 dcd.method=FD asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128
+python examples/main.py exp=lr20_FDBest_objv_cc 'convex=[False, False]' step_r=20 step_t=0.02 dcd.method=FD asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128
+python examples/main.py exp=lr50_FDBest_objv_cc 'convex=[False, False]' step_r=50 step_t=0.05 dcd.method=FD asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128
+python examples/main.py exp=lr100_FDBest_objv_cc 'convex=[False, False]' step_r=100 step_t=0.1 dcd.method=FD asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128

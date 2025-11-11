@@ -1,0 +1,10 @@
+python examples/main.py exp=margin0_RS1DirBest_objv_cx dcd.method=RS1Dir margin=0.0 'convex=[True, True]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin0_RS1DirBest_objv_cc dcd.method=RS1Dir margin=0.0 'convex=[False, False]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin1e-5_RS1DirBest_objv_cx dcd.method=RS1Dir margin=0.00001 'convex=[True, True]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin1e-5_RS1DirBest_objv_cc dcd.method=RS1Dir margin=0.00001 'convex=[False, False]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin1e-4_RS1DirBest_objv_cx dcd.method=RS1Dir margin=0.0001 'convex=[True, True]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin1e-4_RS1DirBest_objv_cc dcd.method=RS1Dir margin=0.0001 'convex=[False, False]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin1e-3_RS1DirBest_objv_cx dcd.method=RS1Dir margin=0.001 'convex=[True, True]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin1e-3_RS1DirBest_objv_cc dcd.method=RS1Dir margin=0.001 'convex=[False, False]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin1e-2_RS1DirBest_objv_cx dcd.method=RS1Dir margin=0.01 'convex=[True, True]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin1e-2_RS1DirBest_objv_cc dcd.method=RS1Dir margin=0.01 'convex=[False, False]' asset_dir=examples/assets/object/objaverse_5k/processed_data

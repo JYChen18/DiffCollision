@@ -1,0 +1,4 @@
+python examples/main.py exp=base_Analytical_DGN_cx 'convex=[True, True]' egt=False dcd.method=Analytical asset_dir=examples/assets/object/DGN_5k/processed_data n_tp=128
+python examples/main.py exp=base_Analytical_objv_cx 'convex=[True, True]' egt=False dcd.method=Analytical asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128
+python examples/main.py exp=base_Analytical_DGN_cc 'convex=[False, False]' egt=False dcd.method=Analytical asset_dir=examples/assets/object/DGN_5k/processed_data n_tp=128
+python examples/main.py exp=base_Analytical_objv_cc 'convex=[False, False]' egt=False dcd.method=Analytical asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128

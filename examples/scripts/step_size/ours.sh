@@ -1,0 +1,14 @@
+python examples/main.py exp=lr1_ours_objv_cx 'convex=[True, True]' step_r=1 step_t=0.001 asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr2_ours_objv_cx 'convex=[True, True]' step_r=2 step_t=0.002 asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr5_ours_objv_cx 'convex=[True, True]' step_r=5 step_t=0.005 asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr10_ours_objv_cx 'convex=[True, True]' step_r=10 step_t=0.01 asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr20_ours_objv_cx 'convex=[True, True]' step_r=20 step_t=0.02 asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr50_ours_objv_cx 'convex=[True, True]' step_r=50 step_t=0.05 asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr100_ours_objv_cx 'convex=[True, True]' step_r=100 step_t=0.1 asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr1_ours_objv_cc 'convex=[False, False]' step_r=1 step_t=0.001 asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr2_ours_objv_cc 'convex=[False, False]' step_r=2 step_t=0.002 asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr5_ours_objv_cc 'convex=[False, False]' step_r=5 step_t=0.005 asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr10_ours_objv_cc 'convex=[False, False]' step_r=10 step_t=0.01 asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr20_ours_objv_cc 'convex=[False, False]' step_r=20 step_t=0.02 asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr50_ours_objv_cc 'convex=[False, False]' step_r=50 step_t=0.05 asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr100_ours_objv_cc 'convex=[False, False]' step_r=100 step_t=0.1 asset_dir=examples/assets/object/objaverse_5k/processed_data

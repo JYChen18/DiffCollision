@@ -1,0 +1,10 @@
+__pycache__/
+*.egg-info
+.DS_Store
+*.so 
+.vscode 
+
+*.npy
+debug*
+output*
+examples/assets/object

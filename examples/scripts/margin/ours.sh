@@ -1,0 +1,10 @@
+python examples/main.py exp=margin0_ours_objv_cx margin=0.0 'convex=[True, True]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin0_ours_objv_cc margin=0.0 'convex=[False, False]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin1e-5_ours_objv_cx margin=0.00001 'convex=[True, True]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin1e-5_ours_objv_cc margin=0.00001 'convex=[False, False]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin1e-4_ours_objv_cx margin=0.0001 'convex=[True, True]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin1e-4_ours_objv_cc margin=0.0001 'convex=[False, False]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin1e-3_ours_objv_cx margin=0.001 'convex=[True, True]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin1e-3_ours_objv_cc margin=0.001 'convex=[False, False]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin1e-2_ours_objv_cx margin=0.01 'convex=[True, True]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=margin1e-2_ours_objv_cc margin=0.01 'convex=[False, False]' asset_dir=examples/assets/object/objaverse_5k/processed_data

@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "pybind11"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "diffcollision"
+version = "0.1.0"
+description = "Robust Differentiable Collision Detection for General Objects."
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+license = { text = "CC BY-NC 4.0" }
+authors = [{ name = "Jiayi Chen" }]
+keywords = ["collision", "differentiable", "robotics", "physics"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: Other/Proprietary License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+]
+
+dependencies = [
+    "torch==2.4.0",
+    "trimesh[easy]",
+    "warp-lang==1.10.0",
+]
+
+[project.optional-dependencies]
+examples = [
+    "pytorch-kinematics",
+    "hydra-core",
+    "mujoco",
+    "usd-core"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,14 @@
+python examples/main.py exp=lr1_RS1DirBase_objv_cx 'convex=[True, True]' step_r=1 step_t=0.001 egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr2_RS1DirBase_objv_cx 'convex=[True, True]' step_r=2 step_t=0.002 egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr5_RS1DirBase_objv_cx 'convex=[True, True]' step_r=5 step_t=0.005 egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr10_RS1DirBase_objv_cx 'convex=[True, True]' step_r=10 step_t=0.01 egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr20_RS1DirBase_objv_cx 'convex=[True, True]' step_r=20 step_t=0.02 egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr50_RS1DirBase_objv_cx 'convex=[True, True]' step_r=50 step_t=0.05 egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr100_RS1DirBase_objv_cx 'convex=[True, True]' step_r=100 step_t=0.1 egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr1_RS1DirBase_objv_cc 'convex=[False, False]' step_r=1 step_t=0.001 egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr2_RS1DirBase_objv_cc 'convex=[False, False]' step_r=2 step_t=0.002 egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr5_RS1DirBase_objv_cc 'convex=[False, False]' step_r=5 step_t=0.005 egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr10_RS1DirBase_objv_cc 'convex=[False, False]' step_r=10 step_t=0.01 egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr20_RS1DirBase_objv_cc 'convex=[False, False]' step_r=20 step_t=0.02 egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr50_RS1DirBase_objv_cc 'convex=[False, False]' step_r=50 step_t=0.05 egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=lr100_RS1DirBase_objv_cc 'convex=[False, False]' step_r=100 step_t=0.1 egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/objaverse_5k/processed_data

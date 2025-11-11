@@ -1,0 +1,4 @@
+python examples/main.py exp=base_RS1Dir_DGN_cx 'convex=[True, True]' egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/DGN_5k/processed_data 
+python examples/main.py exp=base_RS1Dir_objv_cx 'convex=[True, True]' egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/objaverse_5k/processed_data
+python examples/main.py exp=base_RS1Dir_DGN_cc 'convex=[False, False]' egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/DGN_5k/processed_data
+python examples/main.py exp=base_RS1Dir_objv_cc 'convex=[False, False]' egt=False dcd.method=RS1Dir dcd.sample=nbr asset_dir=examples/assets/object/objaverse_5k/processed_data
