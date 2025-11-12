@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
+from typing import get_type_hints
 import torch
 import numpy as np
 import logging
@@ -13,15 +14,15 @@ from diffcollision.io import DCMesh
 class _BaseConfig:
     # --- Public API ---
     n_thread: int = 16  # cpu thread number for coal library
-    tp1_o: torch.Tensor = None  # for adaptive sampling and visualization
-    tp2_o: torch.Tensor = None
+    tp1_o: torch.Tensor | None = None  # for adaptive sampling and visualization
+    tp2_o: torch.Tensor | None = None
     egt: bool = True  # whether to enable equivalent gradient transport
     egt_step_r: float = 1.0  # the relative step between r and t matters
     egt_step_t: float = 0.001  # the relative step between r and t matters
 
     # --- Internal Fields ---
     _meshes: list[DCMesh] = None
-    _collision_pairs: list[tuple[int, int]] = None
+    _collision_pairs: list[tuple[int, int]] | torch.Tensor = None
     _cvx_lst: list = None
     _sph_lst: torch.Tensor = None
     _ts: DCTensorSpec = None
@@ -37,7 +38,21 @@ class _BaseConfig:
     _mp2cp_idx2: torch.Tensor = None
     _cp2mp_idx: torch.Tensor = None  # convex piece pair -> mesh pair
 
+    def _check_public_param(self):
+        hints = get_type_hints(self.__class__)
+        for f in fields(self):
+            if f.name.startswith("_"):  # skip internal params
+                continue
+            expected_type = hints[f.name]
+            value = getattr(self, f.name)
+            if not isinstance(value, expected_type):
+                raise TypeError(
+                    f"Field '{f.name}' expects {expected_type}, got {type(value)} (value={value!r})"
+                )
+        return
+
     def __post_init__(self):
+        self._check_public_param()
         self._ts = DCTensorSpec(
             device=self._meshes[0].bounding_spheres.device,
             dtype=self._meshes[0].bounding_spheres.dtype,

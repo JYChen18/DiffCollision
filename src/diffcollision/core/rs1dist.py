@@ -144,7 +144,9 @@ def _local_sample(cfg: RS1DistConfig, T1, T2, wp1, wp2, normal, batch):
         )
         ls_o = ts.to(ls_o)
     else:
-        raise NotImplementedError
+        raise ValueError(
+            f"Unknown sampling strategy: {cfg.sample}. Choices are 'adp', 'fix', 'nbr'."
+        )
     return ls_o[:, 0], ls_o[:, 1]
 
 

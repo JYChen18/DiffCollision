@@ -260,7 +260,7 @@ def local_sample_w_dthre(
     elif sample_strategy == "fix":
         valid = dist < torch.maximum(dist_thre, min_thre).unsqueeze(-1)  # b, s
     else:
-        raise NotImplementedError(
+        raise ValueError(
             f"Unknown sample strategy {sample_strategy}. Available: 'adp', 'fix'."
         )
 
@@ -318,7 +318,7 @@ def global_sample_v_or_f(
         p, _, f = fine_mesh.nearest.on_surface(p1)
         n = fine_mesh.face_normals[f]
     else:
-        raise NotImplementedError(
+        raise ValueError(
             f"Unsupported sample type: {type_sample}. Available choices: 'v' or 'f', indicating vertices and faces. "
         )
 

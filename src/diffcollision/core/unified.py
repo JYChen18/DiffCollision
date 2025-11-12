@@ -203,6 +203,7 @@ class DiffCollision:
             A structured container of world-frame and (optionally) object local-frame results.
         """
         assert len(transforms.shape) == 4, "transforms should be of shape (b, n, 4, 4)"
+        assert transforms.shape[1] == len(self.cfg._meshes), f"transforms should match the number of meshes. Got {transforms.shape}, expected (b, {len(self.cfg._meshes)}, 4, 4)."
         T1 = transforms[:, self.cfg._ml2mp_idx1]
         T2 = transforms[:, self.cfg._ml2mp_idx2]
 
