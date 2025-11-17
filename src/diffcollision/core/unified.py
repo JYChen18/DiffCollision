@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field, fields
 import torch
 
-from diffcollision.utils import eqv_grad, torch_normalize_vector
+from diffcollision.utils import eqv_grad, torch_normalize_vector, DCTensorSpec
 from diffcollision.core.rs1dist import RS1DistCollision, RS1DistConfig
 from diffcollision.core.rs1dir import RS1DirCollision, RS1DirConfig
 from diffcollision.core.rs0 import RS0Collision, RS0Config
@@ -202,8 +202,7 @@ class DiffCollision:
         DCResult
             A structured container of world-frame and (optionally) object local-frame results.
         """
-        assert len(transforms.shape) == 4, "transforms should be of shape (b, n, 4, 4)"
-        assert transforms.shape[1] == len(self.cfg._meshes), f"transforms should match the number of meshes. Got {transforms.shape}, expected (b, {len(self.cfg._meshes)}, 4, 4)."
+        self.assert_valid_transforms(transforms)
         T1 = transforms[:, self.cfg._ml2mp_idx1]
         T2 = transforms[:, self.cfg._ml2mp_idx2]
 
@@ -295,3 +294,45 @@ class DiffCollision:
             Configuration instance (e.g., `RS1DistConfig`, `FDConfig`, etc.).
         """
         return self.cfg
+
+    def assert_valid_transforms(self, transforms):
+        ts: DCTensorSpec = self.cfg._ts
+        # type check
+        assert (
+            isinstance(transforms, torch.Tensor)
+            and transforms.dtype == ts.dtype
+            and transforms.device == ts.device
+        ), (
+            "Invalid transforms tensor: expected a torch.Tensor with "
+            f"dtype={ts.dtype} and device={ts.device}, but got "
+            f"type={type(transforms)}, dtype={getattr(transforms, 'dtype', None)}, "
+            f"device={getattr(transforms, 'device', None)}."
+        )
+
+        # shape check
+        assert (
+            transforms.ndim == 4
+            and transforms.shape[-2:] == (4, 4)
+            and transforms.shape[1] == len(self.cfg._meshes)
+        ), f"transforms have the wrong shape. Got {transforms.shape}, expected (b, {len(self.cfg._meshes)}, 4, 4)."
+
+        # bottom row check
+        bottom = transforms[..., 3, :]
+        assert torch.allclose(
+            bottom, ts.to([0.0, 0.0, 0.0, 1.0])
+        ), f"Last row must be [0,0,0,1]"
+
+        # rotation orthonormality check
+        R = transforms[..., :3, :3]
+        should_be_identity = R @ R.transpose(-1, -2)
+        assert torch.allclose(
+            should_be_identity, ts.to(torch.eye(3)), atol=1e-5
+        ), "Rotation part is not orthonormal"
+
+        # determinant +1 check
+        det = torch.det(R)
+        assert torch.allclose(
+            det, ts.to(torch.ones_like(det)), atol=1e-5
+        ), f"Rotation matrices must have det=1"
+
+        return True

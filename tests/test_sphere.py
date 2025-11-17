@@ -12,12 +12,12 @@ from examples.util.rotation import set_seed
 
 
 def test_forward(mesh_lst, ts):
-    T = torch.eye(4)[None, None].repeat(1, 2, 1, 1)
+    T = ts.to(torch.eye(4)[None, None].repeat(1, 2, 1, 1))
     T[:, 1, 0, 3] = 0.5
 
     diffcoll = DiffCollision(mesh_lst)
     res = diffcoll.forward(T, return_local=False)
-    assert res.sdf == 0.3
+    assert torch.isclose(res.sdf, ts.to(0.3))
     logging.info("Pass forward test")
 
 
@@ -93,7 +93,7 @@ def test_backward_hard(mesh_lst, ts):
 
 
 if __name__ == "__main__":
-    ts = DCTensorSpec()
+    ts = DCTensorSpec(dtype="double")
     sphere = trimesh.primitives.Sphere(radius=0.1, subdivisions=5)
     mesh1 = DCMesh.from_data(sphere.vertices, sphere.faces, ts)
     mesh2 = DCMesh.from_data(sphere.vertices, sphere.faces, ts)
