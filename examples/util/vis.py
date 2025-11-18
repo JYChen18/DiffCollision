@@ -9,7 +9,7 @@ import numpy as np
 import trimesh
 import torch
 
-from .rotation import torch_quaternion_rotate_points, torch_matrix_to_quaternion
+from .rotation import torch_matrix_to_quaternion
 from diffcollision import DCDebugDict
 
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
@@ -31,7 +31,9 @@ class UsdStage:
         timestep: int | None = None,
         dt: float = 0.02,
         interp_step: float = 1,
+        disable_axis: bool = False,
     ):
+        self.disable_axis = disable_axis
         self.stage = Usd.Stage.CreateNew(name)
         UsdGeom.SetStageUpAxis(self.stage, "Z")
         UsdGeom.SetStageMetersPerUnit(self.stage, 1)
@@ -47,10 +49,11 @@ class UsdStage:
 
     def add_subroot(self, root: str = "/world", sub_root: str = "obstacles"):
         xform = self.stage.DefinePrim(os.path.join(root, sub_root), "Xform")
-        UsdGeom.Xformable(xform).AddScaleOp()
-        xform.GetAttribute("xformOp:scale").Set(Gf.Vec3f([100.0, 100.0, 100.0]))
-        UsdGeom.Xformable(xform).AddTranslateOp()
-        xform.GetAttribute("xformOp:translate").Set(Gf.Vec3f([100.0, 100.0, 100.0]))
+        if self.disable_axis:
+            UsdGeom.Xformable(xform).AddScaleOp()
+            xform.GetAttribute("xformOp:scale").Set(Gf.Vec3f([100.0, 100.0, 100.0]))
+            UsdGeom.Xformable(xform).AddTranslateOp()
+            xform.GetAttribute("xformOp:translate").Set(Gf.Vec3f([100.0, 100.0, 100.0]))
 
     def add_mesh_lst(
         self,
@@ -202,6 +205,7 @@ def vis_usd(
         "wp1": "red",
         "wp2": "red",
     },
+    disable_axis: bool = False,
 ):
     data_length = len(vis_dict.wp1)
     tm_lst = [m.coarse_mesh for m in vis_dict.meshes]
@@ -221,7 +225,9 @@ def vis_usd(
     for i in vis_ids:
         save_path = os.path.join(save_folder, f"{i}.usd")
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        usd_stage = UsdStage(save_path, timestep=data_length, dt=0.01)
+        usd_stage = UsdStage(
+            save_path, timestep=data_length, dt=0.01, disable_axis=disable_axis
+        )
 
         mesh_lst = [m.coarse_mesh for m in vis_dict.meshes]
         pose_lst = (

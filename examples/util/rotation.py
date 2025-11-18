@@ -173,35 +173,6 @@ def torch_normal_to_rot(
     return torch.stack([axis_0, axis_1, axis_2], dim=-1)
 
 
-def torch_quaternion_rotate_points(q, points):
-    """
-    Rotate 3D points using quaternions with batched support.
-
-    Args:
-        q: torch.Tensor of shape (..., 4) - batched quaternions [w, x, y, z]
-        points: torch.Tensor of shape (..., 3) - batched 3D points to rotate
-
-    Returns:
-        torch.Tensor of shape (..., 3) - rotated points
-    """
-    # Normalize quaternions
-    q = q / torch.norm(q, dim=-1, keepdim=True)
-
-    # Split quaternion into scalar and vector parts
-    q_w = q[..., 0:1]  # shape (..., 1)
-    q_xyz = q[..., 1:]  # shape (..., 3)
-
-    # Compute cross product: cross(q_xyz, points)
-    cross_p = torch.cross(q_xyz, points, dim=-1)
-
-    # Compute the rotation: v' = v + 2 * q_w * cross(q_xyz, v) + 2 * cross(q_xyz, cross(q_xyz, v))
-    rotated_points = (
-        points + 2 * q_w * cross_p + 2 * torch.cross(q_xyz, cross_p, dim=-1)
-    )
-
-    return rotated_points
-
-
 def sample_target_point(
     mesh1: DCMesh,
     mesh2: DCMesh,
