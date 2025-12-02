@@ -218,8 +218,8 @@ def vis_usd(
     n_t, _, n_m = q.shape[:3]
     assert n_m == len(vis_dict.meshes)
 
-    scale = max([np.linalg.norm(tm.bounds[0] - tm.bounds[1]) for tm in tm_lst])
-    sphere_mesh = trimesh.primitives.Sphere(radius=0.025 * scale)
+    scale = min([np.linalg.norm(tm.bounds[0] - tm.bounds[1]) for tm in tm_lst])
+    sphere_mesh = trimesh.primitives.Sphere(radius=0.1 * scale)
     help2 = torch.tensor([[1, 0, 0, 0, 1]]).expand(n_t, -1)
 
     for i in vis_ids:
