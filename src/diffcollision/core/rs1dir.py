@@ -53,7 +53,7 @@ class RS1DirConfig(RS1DistConfig):
 
 class RS1DirCollision(_BaseCollision):
     @staticmethod
-    def backward(ctx, grad_wp1, grad_wp2, grad_d_sign):
+    def backward(ctx, grad_wp1, grad_wp2, grad_n, grad_d_sign):
         T1_raw, T2_raw, dist_raw, normal_raw, wp1_raw, wp2_raw = ctx.saved_tensors
         b, p = T1_raw.shape[:2]
         T1, T2 = T1_raw.view(b * p, 4, 4), T2_raw.view(b * p, 4, 4)
@@ -65,6 +65,7 @@ class RS1DirCollision(_BaseCollision):
 
         with torch.no_grad():
             ls1_o, ls2_o = _local_sample(cfg, T1, T2, wp1, wp2, normal, b)
+            ls1_o, ls2_o = ls1_o[..., :3], ls2_o[..., :3]
             if ctx.vis is not None:
                 ls1 = ls1_o @ T1[:, :3, :3].transpose(-1, -2) + T1[:, None, :3, 3]
                 ls2 = ls2_o @ T2[:, :3, :3].transpose(-1, -2) + T2[:, None, :3, 3]

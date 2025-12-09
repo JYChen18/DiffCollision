@@ -169,4 +169,4 @@ class _BaseCollision(torch.autograd.Function):
         ctx.cfg = cfg
         ctx.vis = vis
         ctx.save_for_backward(T1, T2, dist, normal, wp1, wp2)
-        return wp1, wp2, d_sign
+        return wp1, wp2, normal, d_sign

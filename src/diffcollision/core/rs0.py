@@ -42,7 +42,7 @@ class RS0Config(_BaseConfig):
 
 class RS0Collision(_BaseCollision):
     @staticmethod
-    def backward(ctx, grad_wp1, grad_wp2, grad_d_sign):
+    def backward(ctx, grad_wp1, grad_wp2, grad_n, grad_d_sign):
         T1, T2, _, _, _, _ = ctx.saved_tensors
         cfg: RS0Config = ctx.cfg
         eps_r, eps_t = cfg.eps_r, cfg.eps_t

@@ -213,7 +213,7 @@ class DiffCollision:
                 T1, T2, self.cfg.egt_step_r, self.cfg.egt_step_t
             )
 
-        wp1, wp2, d_sign = self.func_cls.apply(
+        wp1, wp2, normal, d_sign = self.func_cls.apply(
             T1_egt, T2_egt, self.cfg, self.debug_dict if not skip_debug else None
         )
 
@@ -234,7 +234,11 @@ class DiffCollision:
                     self.debug_dict.tp1.append(tp1.detach().cpu())
                     self.debug_dict.tp2.append(tp2.detach().cpu())
 
-        normal = d_sign.unsqueeze(-1) * torch_normalize_vector(wp2 - wp1)
+        # NOTE: The following normal's gradient will have numerical issues when wp1 is close to wp2.
+        # We have only implemented a smooth normal derivative for `method=RS1Dist`.
+        if self.func_cls != RS1DistCollision:
+            normal = d_sign.unsqueeze(-1) * torch_normalize_vector(wp2 - wp1)
+
         signed_dist = d_sign * (wp2 - wp1).norm(dim=-1)
         if return_local:  # NOTE: use T_egt to ensure correct gradient flow
             wp1_o = torch.einsum(

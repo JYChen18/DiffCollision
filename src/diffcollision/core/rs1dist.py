@@ -4,7 +4,11 @@ import numpy as np
 
 from diffcollision.cpp._coal_openmp import batched_get_neighbor
 from diffcollision.core.base import _BaseCollision, _BaseConfig
-from diffcollision.utils import local_sample_w_dthre, global_sample_v_and_f
+from diffcollision.utils import (
+    local_sample_w_dthre,
+    global_sample_v_and_f,
+    torch_normalize_vector,
+)
 
 
 @dataclass
@@ -46,6 +50,9 @@ class RS1DistConfig(_BaseConfig):
     min_dthre : float, optional
         Minimum distance threshold for local sampling, absolute value.
         Required if `sample` is "adp" or "fix". Default: 0.01.
+    nthre : float, optional
+        Normal threshold for local sampling.
+        Required if `sample` is "adp" or "fix". Default: 2 * np.pi / 3 (unit: radian).
     """
 
     sample: str = "fix"
@@ -54,6 +61,7 @@ class RS1DistConfig(_BaseConfig):
     n_level: int = 5
     dthre: float = 1.0
     min_dthre: float = 0.01
+    nthre: float = 2 * np.pi / 3
 
     # --- For each mesh ---
     _gs_o_mesh: torch.Tensor = None  # global samples in the object local frame
@@ -85,14 +93,16 @@ class RS1DistConfig(_BaseConfig):
         if self._gs_o_mesh is None:
             self._dthre_mesh = self._ts.to(torch.zeros(n_mesh))
             self._min_dthre_mesh = self._ts.to(torch.zeros(n_mesh))
-            self._gs_o_mesh = self._ts.to(torch.zeros(n_mesh, self.n_global, 3))
+            self._gs_o_mesh = self._ts.to(torch.zeros(n_mesh, self.n_global, 6))
             for i, m in enumerate(self._meshes):
                 cm, fm = m.coarse_mesh, m.fine_mesh
                 obj_scale = np.linalg.norm(cm.bounds[0] - cm.bounds[1])
                 safe_dthre = 2 * np.sqrt(self.n_local * cm.area / np.pi / self.n_global)
                 self._dthre_mesh[i] = self.dthre * obj_scale
                 self._min_dthre_mesh[i] = max(safe_dthre, self.min_dthre)
-                self._gs_o_mesh[i], _ = global_sample_v_and_f(cm, fm, self.n_global)
+                self._gs_o_mesh[i, :, :3], self._gs_o_mesh[i, :, 3:] = (
+                    global_sample_v_and_f(cm, fm, self.n_global)
+                )
 
         # Prepare per mesh-pair parameters. Update when collision pairs change.
         m2g_idx = torch.stack([self._ml2mp_idx1, self._ml2mp_idx2], dim=-1).reshape(-1)
@@ -117,14 +127,18 @@ def _local_sample(cfg: RS1DistConfig, T1, T2, wp1, wp2, normal, batch):
         # Transform witness points from world frame to object local frame
         T = torch.stack([T1, T2], dim=-3).reshape(-1, 4, 4)
         wp = torch.stack([wp1, wp2], dim=-2).reshape(-1, 3)
-        gs_o[:, -1] = torch.einsum("bji,bj->bi", T[:, :3, :3], wp - T[:, :3, 3])
+        nn = torch.stack([normal, -normal], dim=-2).reshape(-1, 3)
+        gs_o[:, -1, :3] = torch.einsum("bji,bj->bi", T[:, :3, :3], wp - T[:, :3, 3])
+        gs_o[:, -1, 3:] = torch.einsum("bji,bj->bi", T[:, :3, :3], nn)
 
         # Local sampling around current witness points
-        ls_o = local_sample_w_dthre(gs_o, tp_o, dthre, min_dthre, n_local, cfg.sample)
-        ls_o = ls_o.reshape(-1, 2, n_local, 3)
+        ls_o = local_sample_w_dthre(
+            gs_o, tp_o, dthre, min_dthre, cfg.nthre, n_local, cfg.sample
+        )
+        ls_o = ls_o.reshape(-1, 2, n_local, 6)
     elif cfg.sample == "nbr":
         ts, n_level, n_local = cfg._ts, cfg.n_level, cfg.n_local
-        ls_o = np.zeros((batch, 2, n_local, 3))
+        ls_o = np.zeros((batch, 2, n_local, 6))
         normal1_o = torch.einsum("bji,bj->bi", T1[:, :3, :3], normal)
         normal2_o = torch.einsum("bji,bj->bi", T2[:, :3, :3], -normal)
         normal_o = torch.stack([normal1_o, normal2_o], dim=-2)
@@ -152,33 +166,41 @@ def _local_sample(cfg: RS1DistConfig, T1, T2, wp1, wp2, normal, batch):
 
 class RS1DistCollision(_BaseCollision):
     @staticmethod
-    def backward(ctx, grad_wp1, grad_wp2, grad_d_sign):
-        T1_raw, T2_raw, _, normal_raw, wp1_raw, wp2_raw = ctx.saved_tensors
+    def backward(ctx, grad_wp1, grad_wp2, grad_n, grad_d_sign):
+        T1_raw, T2_raw, dist_raw, normal_raw, wp1_raw, wp2_raw = ctx.saved_tensors
         b, p = T1_raw.shape[:2]
         T1, T2 = T1_raw.view(b * p, 4, 4), T2_raw.view(b * p, 4, 4)
         wp1, wp2 = wp1_raw.view(b * p, 3), wp2_raw.view(b * p, 3)
-        normal = normal_raw.view(b * p, 3)
+        dist, normal = dist_raw.view(b * p, 1), normal_raw.view(b * p, 3)
         cfg: RS1DistConfig = ctx.cfg
 
         with torch.no_grad():
             ls1_o, ls2_o = _local_sample(cfg, T1, T2, wp1, wp2, normal, b)
             if ctx.vis is not None:
-                ls1 = ls1_o @ T1[:, :3, :3].transpose(-1, -2) + T1[:, None, :3, 3]
-                ls2 = ls2_o @ T2[:, :3, :3].transpose(-1, -2) + T2[:, None, :3, 3]
+                ls1 = (
+                    ls1_o[..., :3] @ T1[:, :3, :3].transpose(-1, -2)
+                    + T1[:, None, :3, 3]
+                )
+                ls2 = (
+                    ls2_o[..., :3] @ T2[:, :3, :3].transpose(-1, -2)
+                    + T2[:, None, :3, 3]
+                )
                 ctx.vis.ls1.append(ls1.detach().cpu().view(b, p, -1, 3))
                 ctx.vis.ls2.append(ls2.detach().cpu().view(b, p, -1, 3))
 
         def wp_func(Ti, wpj, lsi_o):
-            lsi = lsi_o @ Ti[:3, :3].T + Ti[:3, 3]
+            lsi = lsi_o[:, :3] @ Ti[:3, :3].T + Ti[:3, 3]
             pdist = (lsi - wpj).norm(dim=-1)
             weight = torch.softmax(-pdist / pdist.std().sqrt(), dim=-1)
             wpi = (weight.unsqueeze(-1) * lsi).sum(dim=-2)
-            return wpi
+            lti = lsi_o[:, 3:] @ Ti[:3, :3].T
+            ni = (weight.unsqueeze(-1) * lti).sum(dim=-2)
+            return (wpi, ni), ni
 
-        jacb_fun = torch.vmap(torch.func.jacrev(wp_func, argnums=(0, 1)))
+        jacb_fun = torch.vmap(torch.func.jacrev(wp_func, argnums=(0, 1), has_aux=True))
 
-        J_f_T1, J_f_wp2 = jacb_fun(T1, wp2, ls1_o)
-        J_g_T2, J_g_wp1 = jacb_fun(T2, wp1, ls2_o)
+        ((J_f_T1, J_f_wp2), (J_fn_T1, J_fn_wp2)), n1 = jacb_fun(T1, wp2, ls1_o)
+        ((J_g_T2, J_g_wp1), (J_gn_T2, J_gn_wp1)), n2 = jacb_fun(T2, wp1, ls2_o)
 
         # solve the system of equations:
         #   (1) J_wp1_T1 = J_f_wp2 @ J_wp2_T1 + J_f_T1
@@ -200,4 +222,30 @@ class RS1DistCollision(_BaseCollision):
         grad2 = torch.einsum(
             "bpijk, bpi -> bpjk", J_wp2_T2.view(b, p, 3, 4, 4), grad_wp2
         ) + torch.einsum("bpijk, bpi -> bpjk", J_wp1_T2.view(b, p, 3, 4, 4), grad_wp1)
+
+        if grad_n is not None and torch.any(grad_n != 0):
+            J_n1_T1 = J_fn_T1 + torch.einsum("bij, bjkl -> bikl", J_fn_wp2, J_wp2_T1)
+            J_n2_T1 = torch.einsum("bij, bjkl -> bikl", J_gn_wp1, J_wp1_T1)
+            J_n1_T2 = torch.einsum("bij, bjkl -> bikl", J_fn_wp2, J_wp2_T2)
+            J_n2_T2 = J_gn_T2 + torch.einsum("bij, bjkl -> bikl", J_gn_wp1, J_wp1_T2)
+
+            def normal_func(n1i, n2i):
+                return torch_normalize_vector(n1i - n2i)
+
+            normal_jacb_fun = torch.vmap(torch.func.jacrev(normal_func, argnums=(0, 1)))
+            J_n_n1, J_n_n2 = normal_jacb_fun(n1, n2)
+            J_n_T1 = torch.einsum("bij, bjkl -> bikl", J_n_n1, J_n1_T1) + torch.einsum(
+                "bij, bjkl -> bikl", J_n_n2, J_n2_T1
+            )
+            J_n_T2 = torch.einsum("bij, bjkl -> bikl", J_n_n1, J_n1_T2) + torch.einsum(
+                "bij, bjkl -> bikl", J_n_n2, J_n2_T2
+            )
+
+            grad1 += torch.einsum(
+                "bpijk, bpi -> bpjk", J_n_T1.view(b, p, 3, 4, 4), grad_n
+            )
+            grad2 += torch.einsum(
+                "bpijk, bpi -> bpjk", J_n_T2.view(b, p, 3, 4, 4), grad_n
+            )
+
         return grad1, grad2, None, None

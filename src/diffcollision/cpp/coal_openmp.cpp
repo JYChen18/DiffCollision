@@ -186,6 +186,7 @@ void batched_get_neighbor(
         sep_vec(2) = sep_vec_ptr[3 * i + 2];
        
         const std::vector<coal::Vec3s>& pts = *(convex_base->points);
+        const std::vector<coal::Vec3s>& ns = *(convex_base->normals);
 
         // find vertex with maximum dot
         double maxdot = -std::numeric_limits<double>::infinity();
@@ -230,9 +231,12 @@ void batched_get_neighbor(
         // fill results (store as double)
         for (size_t j = 0; j < n_nbr; ++j) {
             size_t idx = neighbor_lst[j % neighbor_lst.size()];
-            neighbor_result_ptr[3 * (n_nbr * i + j) + 0] = pts[idx][0];
-            neighbor_result_ptr[3 * (n_nbr * i + j) + 1] = pts[idx][1];
-            neighbor_result_ptr[3 * (n_nbr * i + j) + 2] = pts[idx][2];
+            neighbor_result_ptr[6 * (n_nbr * i + j) + 0] = pts[idx][0];
+            neighbor_result_ptr[6 * (n_nbr * i + j) + 1] = pts[idx][1];
+            neighbor_result_ptr[6 * (n_nbr * i + j) + 2] = pts[idx][2];
+            neighbor_result_ptr[6 * (n_nbr * i + j) + 3] = ns[idx][0];
+            neighbor_result_ptr[6 * (n_nbr * i + j) + 4] = ns[idx][1];
+            neighbor_result_ptr[6 * (n_nbr * i + j) + 5] = ns[idx][2];
         }
     } // end omp for
 }

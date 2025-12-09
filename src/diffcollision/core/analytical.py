@@ -33,7 +33,7 @@ class AnalyticalConfig(_BaseConfig):
 
 class AnalyticalCollision(_BaseCollision):
     @staticmethod
-    def backward(ctx, grad_wp1, grad_wp2, grad_d_sign):
+    def backward(ctx, grad_wp1, grad_wp2, grad_n, grad_d_sign):
         T1, T2, _, _, wp1, wp2 = ctx.saved_tensors
         b, p = T1.shape[:2]
         cfg: AnalyticalConfig = ctx.cfg
