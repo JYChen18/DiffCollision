@@ -177,13 +177,21 @@ class RS1DistCollision(_BaseCollision):
 
         jacb_fun = torch.vmap(torch.func.jacrev(wp_func, argnums=(0, 1)))
 
-        # Assume wp2 is fixed when computing J_wp1_T1
-        J_wp1_T1, J_wp1_wp2 = jacb_fun(T1, wp2, ls1_o)
-        J_wp2_T2, J_wp2_wp1 = jacb_fun(T2, wp1, ls2_o)
+        J_f_T1, J_f_wp2 = jacb_fun(T1, wp2, ls1_o)
+        J_g_T2, J_g_wp1 = jacb_fun(T2, wp1, ls2_o)
 
-        # Use precomputed J_wp1_T1 and J_wp2_T2 to avoid reusing the assumption
-        J_wp2_T1 = torch.einsum("bij, bjkl -> bikl", J_wp2_wp1, J_wp1_T1)
-        J_wp1_T2 = torch.einsum("bij, bjkl -> bikl", J_wp1_wp2, J_wp2_T2)
+        # solve the system of equations:
+        #   (1) J_wp1_T1 = J_f_wp2 @ J_wp2_T1 + J_f_T1
+        #   (2) J_wp2_T1 = J_g_wp1 @ J_wp1_T1
+        help_eye = cfg._ts.to(torch.eye(3)[None].expand(b * p, -1, -1))
+        J_wp1_T1 = torch.linalg.solve(
+            help_eye - J_f_wp2 @ J_g_wp1, J_f_T1.view(b * p, 3, 16)
+        ).view(b * p, 3, 4, 4)
+        J_wp2_T1 = torch.einsum("bij, bjkl -> bikl", J_g_wp1, J_wp1_T1)
+        J_wp2_T2 = torch.linalg.solve(
+            help_eye - J_g_wp1 @ J_f_wp2, J_g_T2.view(b * p, 3, 16)
+        ).view(b * p, 3, 4, 4)
+        J_wp1_T2 = torch.einsum("bij, bjkl -> bikl", J_f_wp2, J_wp2_T2)
 
         # Chain rule
         grad1 = torch.einsum(
