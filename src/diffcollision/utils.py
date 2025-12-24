@@ -302,8 +302,10 @@ def local_sample_w_dthre(
 def global_sample_v_and_f(
     coarse_mesh: trimesh.Trimesh, fine_mesh: trimesh.Trimesh, n_sample: int
 ):
-    vp, vn = global_sample_v_or_f(coarse_mesh, fine_mesh, n_sample // 2, "v")
-    sp, sn = global_sample_v_or_f(coarse_mesh, fine_mesh, n_sample // 2, "f")
+    v_sample = min(n_sample // 2, len(fine_mesh.vertices))
+    f_sample = n_sample - v_sample
+    vp, vn = global_sample_v_or_f(coarse_mesh, fine_mesh, v_sample, "v")
+    sp, sn = global_sample_v_or_f(coarse_mesh, fine_mesh, f_sample, "f")
     return torch.cat([vp, sp], dim=0), torch.cat([vn, sn], dim=0)
 
 
@@ -314,7 +316,10 @@ def global_sample_v_or_f(
     type_sample: str,
 ):
     if type_sample == "v":
-        v_ind = np.random.choice(range(len(fine_mesh.vertices)), n_sample)
+        replace_flag = n_sample > len(fine_mesh.vertices)
+        v_ind = np.random.choice(
+            range(len(fine_mesh.vertices)), n_sample, replace=replace_flag
+        )
         p, n = fine_mesh.vertices[v_ind], fine_mesh.vertex_normals[v_ind]
     elif type_sample == "f":
         p1, _ = trimesh.sample.sample_surface_even(coarse_mesh, n_sample)
