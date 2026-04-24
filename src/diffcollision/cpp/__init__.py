@@ -18,7 +18,7 @@ def load_dependencies():
             
             # Load dependencies in order
             ext = ".dylib" if platform.system() == "Darwin" else ".so"
-            libs = ["libcoal", "libeigenpy"]
+            libs = ["libcoal", "libeigenpy", "libomp"]
             
             for lib in libs:
                 lib_path = os.path.join(lib_dir, lib + ext)
