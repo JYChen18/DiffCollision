@@ -1,6 +1,6 @@
 # Differentiable Collision Detection (DiffCollision)
 
-Official implementation for [Robust Differentiable Collision Detection for General Objects](https://arxiv.org/abs/2511.06267).
+Official implementation for [[ICRA 2026] Robust Differentiable Collision Detection for General Objects](https://arxiv.org/abs/2511.06267).
 
 ## Overview
 
@@ -40,15 +40,16 @@ For more examples:
 
 
 ## Installation
-Create and activate a Conda environment with the `coal` dependency
+
+**For local development:**
 ```bash
-conda create -n dcd python=3.10 coal -c conda-forge
-conda activate dcd
+uv pip install -e .              # Core library only
+uv pip install -e '.[examples]'  # Include dependencies for examples
 ```
-Then install **DiffCollision**:
+
+**To use in another project:**
 ```bash
-pip install -e .              # Core library only
-pip install -e '.[examples]'  # Include dependencies for examples
+uv add git+https://github.com/JYChen18/DiffCollision.git
 ```
 
 ## Reproducing Paper Results
@@ -76,12 +77,12 @@ CUDA_VISIBLE_DEVICES=0 bash examples/scripts/baseline/ours.sh
 ```
 To debug and visualization,
 ```bash
-python examples/main.py exp=debug n_tp=10 vis=True n_prob=1 prob_rand=None 'obj=[core_jar_5a4af043ba70f9682db9fca4b68095, sem_TissueBox_fd9c40cd2ff2aab4a843bb865a04c01a]' 'scale=[0.08238040130667001, 0.04604694495201166]' 
+uv run examples/main.py exp=debug n_tp=10 vis=True n_prob=1 prob_rand=None 'obj=[core_jar_5a4af043ba70f9682db9fca4b68095, sem_TissueBox_fd9c40cd2ff2aab4a843bb865a04c01a]' 'scale=[0.08238040130667001, 0.04604694495201166]' 
 ```
 
 ### 3. Run the grasp refinement task
 ```bash
-python examples/grasp.py exp=grasp vis=True
+uv run examples/grasp.py exp=grasp vis=True
 ```
 
 

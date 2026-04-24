@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel", "pybind11"]
+requires = ["setuptools>=61.0", "wheel", "pybind11", "coal>=3.0.2", "eigenpy>=3.12.0", "cmeel-eigen", "cmeel-libomp"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,7 @@ name = "diffcollision"
 version = "0.1.0"
 description = "Robust Differentiable Collision Detection for General Objects."
 readme = "README.md"
-requires-python = ">=3.10,<3.12"
+requires-python = ">=3.10"
 license = { text = "CC BY-NC 4.0" }
 authors = [{ name = "Jiayi Chen" }]
 keywords = ["collision", "differentiable", "robotics", "physics"]
@@ -20,9 +20,12 @@ classifiers = [
 ]
 
 dependencies = [
+    "coal>=3.0.2",
+    "cmeel-eigen",
+    "cmeel-libomp",
     "torch==2.4.0",
-    "trimesh[easy]",
-    "warp-lang==1.10.0",
+    "trimesh[easy]>=4.11.5",
+    "warp-lang>=1.12.1",
 ]
 
 [project.optional-dependencies]
