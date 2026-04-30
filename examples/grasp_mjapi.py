@@ -1,5 +1,4 @@
 import numpy as np
-import trimesh
 import os
 import mujoco
 import logging
@@ -28,7 +27,6 @@ def main(cfg):
     xml_path = "examples/assets/hand/shadow/right.xml"
     hand_model = mujoco.MjModel.from_xml_path(xml_path)
     hand_body_name = get_link_names_from_mjmodel(hand_model)[1:]
-    print(len(hand_body_name))
 
     data = np.load(npy_path, allow_pickle=True).item()
 
@@ -46,10 +44,13 @@ def main(cfg):
     ).unsqueeze(0)
 
     dcd_cfg = OmegaConf.to_container(cfg.dcd, resolve=True)
-    diffcoll = DiffCollision(mj_model=model, tp1_o=tp1_o, tp2_o=tp2_o, **dcd_cfg)
+    diffcoll = DiffCollision.build_from_mjmodel(
+        model, tp1_o=tp1_o, tp2_o=tp2_o, **dcd_cfg
+    )
 
     T_obj = ts.to(torch.eye(4)[None])
     joint_angle = ts.to(data["grasp_qpos"])
+    joint_angle[..., 1] -= 0.1
     joint_angle.requires_grad_()
 
     # Forward kinematics

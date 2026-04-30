@@ -143,13 +143,12 @@ class _BaseCollision(torch.autograd.Function):
         )  # (b, p)
 
         # for each mesh-pair, find the convex-piece-pair with smallest s2s_min
-        best_cp_idx = ts.to_idx(torch.zeros((n_batch, n_mesh_pair)))
-        for mp_idx in range(n_mesh_pair):
-            cp_mask = cfg._cp2mp_idx == mp_idx
-            cp_idx = torch.where(cp_mask)[0]
-            local_s2s_min = s2s_min[:, cp_mask]  # (b, n_cp_for_this_mesh_pair)
-            local_argmin = local_s2s_min.argmin(dim=1)  # (b,)
-            best_cp_idx[:, mp_idx] = cp_idx[local_argmin]
+        pair_ids = torch.arange(n_mesh_pair, device=s2s_min.device)  # (p,)
+        cp2mp = cfg._cp2mp_idx.to(s2s_min.device)  # (k,)
+        masked_s2s_min = s2s_min[:, :, None].masked_fill(
+            cp2mp[None, :, None] != pair_ids[None, None, :], float("inf")
+        )  # (b, k, p)
+        best_cp_idx = masked_s2s_min.argmin(dim=1)  # (b, p)
 
         # closest bounding spheres per mesh-pair
         best_sph1 = sph1_o[best_cp_idx]  # (b, p, 4)
@@ -201,6 +200,28 @@ class _BaseCollision(torch.autograd.Function):
         wp2_out = np.zeros((n_batch, n_mesh_pair, 3))
         min_idx_out = np.zeros((n_batch, n_mesh_pair), dtype=np.uintp)
 
+        # Narrow-phase GJK
+        if n_valid > 0:
+            batched_coal_distance(
+                cvx_lst,
+                cfg._cl2cp_idx1.cpu().numpy().reshape(-1),
+                T1.cpu().numpy().reshape(-1),
+                cfg._cl2cp_idx2.cpu().numpy().reshape(-1),
+                T2.cpu().numpy().reshape(-1),
+                cfg._cp2mp_idx.cpu().numpy().reshape(-1),
+                valid_idx,
+                n_batch,
+                n_cvx_pair,
+                n_mesh_pair,
+                n_valid,
+                cfg.n_thread,
+                dist_out.reshape(-1),
+                normal_out.reshape(-1),
+                wp1_out.reshape(-1),
+                wp2_out.reshape(-1),
+                min_idx_out.reshape(-1),
+            )
+
         # Fill faraway pairs directly from bounding spheres
         far_mask_np = far_mask.cpu().numpy()
         dist_out[far_mask_np] = dist_sph.detach().cpu().numpy()[far_mask_np]
@@ -211,26 +232,6 @@ class _BaseCollision(torch.autograd.Function):
             best_cp_idx.detach().cpu().numpy()[far_mask_np].astype(np.uintp)
         )
 
-        # Narrow-phase GJK
-        batched_coal_distance(
-            cvx_lst,
-            cfg._cl2cp_idx1.cpu().numpy().reshape(-1),
-            T1.cpu().numpy().reshape(-1),
-            cfg._cl2cp_idx2.cpu().numpy().reshape(-1),
-            T2.cpu().numpy().reshape(-1),
-            cfg._cp2mp_idx.cpu().numpy().reshape(-1),
-            valid_idx,
-            n_batch,
-            n_cvx_pair,
-            n_mesh_pair,
-            n_valid,
-            cfg.n_thread,
-            dist_out.reshape(-1),
-            normal_out.reshape(-1),
-            wp1_out.reshape(-1),
-            wp2_out.reshape(-1),
-            min_idx_out.reshape(-1),
-        )
         dist, normal = ts.to(dist_out), ts.to(normal_out)
         wp1, wp2 = ts.to(wp1_out), ts.to(wp2_out)
         d_sign = 2 * (dist > 0) - 1
