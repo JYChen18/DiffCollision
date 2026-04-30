@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field, fields
 import torch
+import mujoco
 
 from diffcollision.utils import eqv_grad, torch_normalize_vector, DCTensorSpec
 from diffcollision.core.rs1dist import RS1DistCollision, RS1DistConfig
@@ -8,8 +9,12 @@ from diffcollision.core.rs0 import RS0Collision, RS0Config
 from diffcollision.core.fd import FDCollision, FDConfig
 from diffcollision.core.analytical import AnalyticalCollision, AnalyticalConfig
 from diffcollision.io import DCMesh
+from diffcollision.mjmesh import (
+    get_mesh_from_mjmodel,
+    get_link_names_from_mjmodel,
+    get_exclude_pairs_from_mjmodel,
+)
 from diffcollision.core.base import _BaseConfig as DCBaseConfig
-
 
 DIFFCOLL_CONFIG_REGISTRY = {
     "RS1Dist": RS1DistConfig,
@@ -134,8 +139,9 @@ class DiffCollision:
 
     def __init__(
         self,
-        meshes: list[DCMesh],
+        meshes: list[DCMesh] = None,
         collision_pairs: list[tuple[int, int]] | torch.Tensor = None,
+        mj_model: mujoco.MjModel = None,
         method: str = "RS1Dist",
         enable_debug: bool = False,
         **kwargs,
@@ -161,6 +167,26 @@ class DiffCollision:
             To view available parameters, see the corresponding config class,
             e.g. `help(RS1DistConfig)`.
         """
+        assert (
+            mj_model is not None or meshes is not None
+        ), "either a MjModel or a mesh list must be provided"
+
+        if mj_model is not None:
+            ts = DCTensorSpec()
+            if "tp1_o" in kwargs and kwargs["tp1_o"] is not None:
+                ts = DCTensorSpec(kwargs["tp1_o"].device, kwargs["tp1_o"].dtype)
+            link_names = get_link_names_from_mjmodel(mj_model)
+            dcmesh_dict = get_mesh_from_mjmodel(mj_model, link_names, ts)
+            running_links = list(dcmesh_dict.keys())
+            meshes = list(dcmesh_dict.values())
+            excluded_link_pairs = get_exclude_pairs_from_mjmodel(mj_model)
+            collision_pairs = []
+            for i in range(len(running_links)):
+                for j in range(i + 1, len(running_links)):
+                    link1, link2 = running_links[i], running_links[j]
+                    if (link1, link2) not in excluded_link_pairs:
+                        collision_pairs.append((i, j))
+
         config_cls = DIFFCOLL_CONFIG_REGISTRY[method]
         func_cls = DIFFCOLL_FUNC_REGISTRY[method]
 

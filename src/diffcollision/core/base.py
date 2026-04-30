@@ -19,6 +19,7 @@ class _BaseConfig:
     egt: bool = True  # whether to enable equivalent gradient transport
     egt_step_r: float = 1.0  # the relative step between r and t matters
     egt_step_t: float = 0.001  # the relative step between r and t matters
+    skip_bound: float = 0.01
 
     # --- Internal Fields ---
     _meshes: list[DCMesh] = None
@@ -117,22 +118,81 @@ class _BaseCollision(torch.autograd.Function):
     @staticmethod
     def forward(ctx, T1: torch.Tensor, T2: torch.Tensor, cfg: _BaseConfig, vis):
         cvx_lst, sph_lst, ts = cfg._cvx_lst, cfg._sph_lst, cfg._ts
-        n_batch, n_mesh_pair = T2.shape[:2]
+        n_batch, n_mesh_pair = T2.shape[:2]  # b, p
+        skip_bound = cfg.skip_bound
+        batched_pair_idx = cfg._cp2mp_idx.expand(n_batch, -1)  # (b, k)
 
-        # Broad-phase filter based on bounding spheres
-        sph1_o, sph2_o = sph_lst[cfg._cl2cp_idx1], sph_lst[cfg._cl2cp_idx2]  # k, 4
+        # Broad-phase filter
+
+        # min/max distance of bounding spheres
+        sph1_o, sph2_o = sph_lst[cfg._cl2cp_idx1], sph_lst[cfg._cl2cp_idx2]  # (k, 4)
         s2s_max, s2s_min = cfg._warp_sphere_dist.forward(
             T1, T2, sph1_o, sph2_o, cfg._mp2cp_idx1, cfg._mp2cp_idx2
-        )
-        batched_pair_idx = cfg._cp2mp_idx[None].expand_as(s2s_max)  # b, k
-        s2s_max_sct = ts.to(torch.zeros((n_batch, cfg._cp2mp_idx.max() + 1)))
+        )  # both (b, k)
+
+        # min upper bound per mesh-pair
+        s2s_max_sct = ts.to(torch.zeros((n_batch, n_mesh_pair)))
         s2s_max_sct.scatter_reduce_(
             1, batched_pair_idx, s2s_max, "amin", include_self=False
-        )  # b, p
-        valid = s2s_min - s2s_max_sct.gather(1, batched_pair_idx)  # b, k
-        valid_idx = torch.where(valid.view(-1) < 0)[0].cpu().numpy()
+        )  # (b, p)
 
-        # Narrow-phase GJK
+        # min lower bound per mesh-pair
+        s2s_min_sct = ts.to(torch.zeros((n_batch, n_mesh_pair)))
+        s2s_min_sct.scatter_reduce_(
+            1, batched_pair_idx, s2s_min, "amin", include_self=False
+        )  # (b, p)
+
+        # for each mesh-pair, find the convex-piece-pair with smallest s2s_min
+        best_cp_idx = ts.to_idx(torch.zeros((n_batch, n_mesh_pair)))
+        for mp_idx in range(n_mesh_pair):
+            cp_mask = cfg._cp2mp_idx == mp_idx
+            cp_idx = torch.where(cp_mask)[0]
+            local_s2s_min = s2s_min[:, cp_mask]  # (b, n_cp_for_this_mesh_pair)
+            local_argmin = local_s2s_min.argmin(dim=1)  # (b,)
+            best_cp_idx[:, mp_idx] = cp_idx[local_argmin]
+
+        # closest bounding spheres per mesh-pair
+        best_sph1 = sph1_o[best_cp_idx]  # (b, p, 4)
+        best_sph2 = sph2_o[best_cp_idx]  # (b, p, 4)
+
+        # apply transforms
+        c1 = (
+            torch.einsum("bpij,bpj->bpi", T1[..., :3, :3], best_sph1[..., :3])
+            + T1[..., :3, 3]
+        )  # (b, p, 3)
+        c2 = (
+            torch.einsum("bpij,bpj->bpi", T2[..., :3, :3], best_sph2[..., :3])
+            + T2[..., :3, 3]
+        )  # (b, p, 3)
+
+        r1 = best_sph1[..., 3:4]  # (b, p, 1)
+        r2 = best_sph2[..., 3:4]  # (b, p, 1)
+        delta = c2 - c1
+        center_dist = delta.norm(dim=-1, keepdim=True)  # (b, p, 1)
+
+        # normals for sphere-defined collisions
+        normal_sph = delta / center_dist.clamp_min(1e-8)
+        fallback_axis = ts.to(torch.tensor([1.0, 0.0, 0.0])).view(1, 1, 3)
+        normal_sph = torch.where(
+            center_dist > 1e-8, normal_sph, fallback_axis.expand_as(normal_sph)
+        )  # (b, p, 3)
+
+        # nearest points for sphere-defined collisions
+        wp1_sph = c1 + normal_sph * r1  # (b, p, 3)
+        wp2_sph = c2 - normal_sph * r2  # (b, p, 3)
+
+        # distance for sphere-defined collisions
+        dist_sph = center_dist[..., 0] - r1[..., 0] - r2[..., 0]  # (b, p)
+
+        # prune convex-piece-pairs if they belong to faraway mesh-pairs
+        far_mask = s2s_min_sct > skip_bound  # (b, p)
+        far_cp_mask = far_mask.gather(1, batched_pair_idx)  # (b, k)
+        # prune convex-piece-pair if min >= max_sct
+        valid = s2s_min - s2s_max_sct.gather(1, batched_pair_idx)  # (b, k)
+        valid_idx = (
+            torch.where(((valid < 0) & (~far_cp_mask)).view(-1))[0].cpu().numpy()
+        )
+
         n_cvx_pair = valid.shape[-1]
         n_valid = len(valid_idx)
         dist_out = np.ones((n_batch, n_mesh_pair)) * 100
@@ -140,6 +200,18 @@ class _BaseCollision(torch.autograd.Function):
         wp1_out = np.zeros((n_batch, n_mesh_pair, 3))
         wp2_out = np.zeros((n_batch, n_mesh_pair, 3))
         min_idx_out = np.zeros((n_batch, n_mesh_pair), dtype=np.uintp)
+
+        # Fill faraway pairs directly from bounding spheres
+        far_mask_np = far_mask.cpu().numpy()
+        dist_out[far_mask_np] = dist_sph.detach().cpu().numpy()[far_mask_np]
+        normal_out[far_mask_np] = normal_sph.detach().cpu().numpy()[far_mask_np]
+        wp1_out[far_mask_np] = wp1_sph.detach().cpu().numpy()[far_mask_np]
+        wp2_out[far_mask_np] = wp2_sph.detach().cpu().numpy()[far_mask_np]
+        min_idx_out[far_mask_np] = (
+            best_cp_idx.detach().cpu().numpy()[far_mask_np].astype(np.uintp)
+        )
+
+        # Narrow-phase GJK
         batched_coal_distance(
             cvx_lst,
             cfg._cl2cp_idx1.cpu().numpy().reshape(-1),
