@@ -54,6 +54,7 @@ class RS1DirConfig(RS1DistConfig):
 class RS1DirCollision(_BaseCollision):
     @staticmethod
     def backward(ctx, grad_wp1, grad_wp2, grad_n, grad_d_sign):
+        grad_wp1, grad_wp2, grad_n = _BaseCollision.pre_backward_logic(ctx, grad_wp1, grad_wp2, grad_n)
         T1_raw, T2_raw, dist_raw, normal_raw, wp1_raw, wp2_raw = ctx.saved_tensors
         b, p = T1_raw.shape[:2]
         T1, T2 = T1_raw.view(b * p, 4, 4), T2_raw.view(b * p, 4, 4)

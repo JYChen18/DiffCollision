@@ -65,7 +65,7 @@ class DCMesh:
         fm_lst: list[trimesh.Trimesh],
         ts: DCTensorSpec = DCTensorSpec(),
     ):
-        cm = cm.convex_hull
+        # cm = cm.convex_hull
         fm_lst = [part.convex_hull for part in fm_lst]
         fm = trimesh.util.concatenate(fm_lst)
 

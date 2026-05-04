@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <mujoco model="right_shadow_hand">
-  <compiler angle="radian" meshdir="./meshes" autolimits="true" />
+  <compiler angle="radian" meshdir="." autolimits="true" />
   <option cone="elliptic" impratio="10" />
   <default>
     <default class="right_hand">
@@ -62,17 +62,17 @@
     <material name="black" specular="0.5" shininess="0.25" rgba="0.16355 0.16355 0.16355 1" />
     <material name="gray" specular="0.0" shininess="0.25" rgba="0.80848 0.80848 0.80848 1" />
     <material name="metallic" specular="0" shininess="0.25" rgba="0.9 0.9 0.9 1" />
-    <mesh class="right_hand" file="/mnt/d/pku/cs/Dexterous_Grasping/DiffCollision/examples/assets/hand/shadow/meshes/palm.obj" />
-    <mesh class="right_hand" file="/mnt/d/pku/cs/Dexterous_Grasping/DiffCollision/examples/assets/hand/shadow/meshes/f_knuckle.obj" />
-    <mesh class="right_hand" file="/mnt/d/pku/cs/Dexterous_Grasping/DiffCollision/examples/assets/hand/shadow/meshes/f_proximal.obj" />
-    <mesh class="right_hand" file="/mnt/d/pku/cs/Dexterous_Grasping/DiffCollision/examples/assets/hand/shadow/meshes/f_middle.obj" />
-    <mesh class="right_hand" file="/mnt/d/pku/cs/Dexterous_Grasping/DiffCollision/examples/assets/hand/shadow/meshes/f_distal_pst.obj" />
-    <mesh class="right_hand" file="/mnt/d/pku/cs/Dexterous_Grasping/DiffCollision/examples/assets/hand/shadow/meshes/lf_metacarpal.obj" />
-    <mesh class="right_hand" file="/mnt/d/pku/cs/Dexterous_Grasping/DiffCollision/examples/assets/hand/shadow/meshes/th_proximal.obj" />
-    <mesh class="right_hand" file="/mnt/d/pku/cs/Dexterous_Grasping/DiffCollision/examples/assets/hand/shadow/meshes/th_middle.obj" />
-    <mesh class="right_hand" file="/mnt/d/pku/cs/Dexterous_Grasping/DiffCollision/examples/assets/hand/shadow/meshes/th_distal_pst.obj" />
-    <mesh name="convex_piece_001.obj" file="/mnt/d/pku/cs/Dexterous_Grasping/DiffCollision/examples/assets/object/DGN_5k/processed_data/core_cellphone_34e36249166b8c6bc3f912172873d52f/urdf/meshes/convex_piece_001.obj" scale="0.11 0.11 0.11" />
-    <mesh name="convex_piece_000.obj" file="/mnt/d/pku/cs/Dexterous_Grasping/DiffCollision/examples/assets/object/DGN_5k/processed_data/core_cellphone_34e36249166b8c6bc3f912172873d52f/urdf/meshes/convex_piece_000.obj" scale="0.11 0.11 0.11" />
+    <mesh class="right_hand" file="hand/shadow/meshes/palm.obj" />
+    <mesh class="right_hand" file="hand/shadow/meshes/f_knuckle.obj" />
+    <mesh class="right_hand" file="hand/shadow/meshes/f_proximal.obj" />
+    <mesh class="right_hand" file="hand/shadow/meshes/f_middle.obj" />
+    <mesh class="right_hand" file="hand/shadow/meshes/f_distal_pst.obj" />
+    <mesh class="right_hand" file="hand/shadow/meshes/lf_metacarpal.obj" />
+    <mesh class="right_hand" file="hand/shadow/meshes/th_proximal.obj" />
+    <mesh class="right_hand" file="hand/shadow/meshes/th_middle.obj" />
+    <mesh class="right_hand" file="hand/shadow/meshes/th_distal_pst.obj" />
+    <mesh name="convex_piece_001.obj" file="object/DGN_5k/processed_data/core_cellphone_34e36249166b8c6bc3f912172873d52f/urdf/meshes/convex_piece_001.obj" scale="0.11 0.11 0.11" />
+    <mesh name="convex_piece_000.obj" file="object/DGN_5k/processed_data/core_cellphone_34e36249166b8c6bc3f912172873d52f/urdf/meshes/convex_piece_000.obj" scale="0.11 0.11 0.11" />
   </asset>
   <worldbody>
     <body name="rh_palm" pos="0 0 0.034">

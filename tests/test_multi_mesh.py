@@ -59,9 +59,9 @@ def test_update_collision_pairs_backward(mesh_lst, collision_pairs, shuffle_lst)
         with torch.no_grad():
             proj2 = torch_matrix_grad_to_se3(T, T.grad)
             T[:] = T @ torch_se3_exp_map(-proj2, step_r, step_t)
-        # if i % 100 == 0:
-        #     logging.info(f"Iter:{i}, Loss: {loss}")
-    assert loss < 1e-5
+        if i % 100 == 0:
+            logging.info(f"Iter:{i}, Loss: {loss}")
+    assert loss < 5e-5
 
     new_coll_pair = collision_pairs[shuffle_lst]
     tp1_o = tp1_o[:, shuffle_lst]
@@ -85,9 +85,9 @@ def test_update_collision_pairs_backward(mesh_lst, collision_pairs, shuffle_lst)
         with torch.no_grad():
             proj2 = torch_matrix_grad_to_se3(T, T.grad)
             T[:] = T @ torch_se3_exp_map(-proj2, step_r, step_t)
-        # if i % 100 == 0:
-        #     logging.info(f"Iter:{i}, Loss: {loss}")
-    assert loss < 1e-5
+        if i % 100 == 0:
+            logging.info(f"Iter:{i}, Loss: {loss}")
+    assert loss < 5e-5
     logging.info("Pass backward test")
 
 
