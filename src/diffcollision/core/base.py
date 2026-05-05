@@ -19,6 +19,7 @@ class _BaseConfig:
     egt: bool = True  # whether to enable equivalent gradient transport
     egt_step_r: float = 1.0  # the relative step between r and t matters
     egt_step_t: float = 0.001  # the relative step between r and t matters
+    margin: float = 10.0    # convex-piece pairs with distance greater than margin are pruned in broad phase
 
     # --- Internal Fields ---
     _meshes: list[DCMesh] = None
@@ -29,7 +30,8 @@ class _BaseConfig:
     _warp_sphere_dist: _WarpSphereDist = None  # Save GPU memory (<1/10 of pytorch ops)
 
     _cvx_n_sum: torch.Tensor = None
-    _cvx_min_idx: torch.Tensor = None  # convex piece id that the witness point lies on
+    _cvx_min_idx: torch.Tensor = None  # convex piece id that the witness point lies on, only used for neighbor sampling
+    _near_mask: torch.Tensor = None
     _ml2mp_idx1: torch.Tensor = None  # mesh list -> mesh pair
     _ml2mp_idx2: torch.Tensor = None
     _cl2cp_idx1: torch.Tensor = None  # convex piece list -> convex piece pair
@@ -117,48 +119,71 @@ class _BaseCollision(torch.autograd.Function):
     @staticmethod
     def forward(ctx, T1: torch.Tensor, T2: torch.Tensor, cfg: _BaseConfig, vis):
         cvx_lst, sph_lst, ts = cfg._cvx_lst, cfg._sph_lst, cfg._ts
-        n_batch, n_mesh_pair = T2.shape[:2]
+        n_batch, n_mesh_pair = T2.shape[:2]  # b, p
+        margin = cfg.margin
+        batched_pair_idx = cfg._cp2mp_idx.expand(n_batch, -1)  # (b, k)
 
-        # Broad-phase filter based on bounding spheres
-        sph1_o, sph2_o = sph_lst[cfg._cl2cp_idx1], sph_lst[cfg._cl2cp_idx2]  # k, 4
+        # Broad-phase filter
+
+        # min/max distance of bounding spheres
+        sph1_o, sph2_o = sph_lst[cfg._cl2cp_idx1], sph_lst[cfg._cl2cp_idx2]  # (k, 4)
         s2s_max, s2s_min = cfg._warp_sphere_dist.forward(
             T1, T2, sph1_o, sph2_o, cfg._mp2cp_idx1, cfg._mp2cp_idx2
-        )
-        batched_pair_idx = cfg._cp2mp_idx[None].expand_as(s2s_max)  # b, k
-        s2s_max_sct = ts.to(torch.zeros((n_batch, cfg._cp2mp_idx.max() + 1)))
+        )  # both (b, k)
+
+        # min upper bound per mesh-pair
+        s2s_max_sct = ts.to(torch.zeros((n_batch, n_mesh_pair)))
         s2s_max_sct.scatter_reduce_(
             1, batched_pair_idx, s2s_max, "amin", include_self=False
-        )  # b, p
-        valid = s2s_min - s2s_max_sct.gather(1, batched_pair_idx)  # b, k
-        valid_idx = torch.where(valid.view(-1) < 0)[0].cpu().numpy()
+        )  # (b, p)
 
-        # Narrow-phase GJK
+        # min lower bound per mesh-pair
+        s2s_min_sct = ts.to(torch.zeros((n_batch, n_mesh_pair)))
+        s2s_min_sct.scatter_reduce_(
+            1, batched_pair_idx, s2s_min, "amin", include_self=False
+        )  # (b, p)
+
+        # prune convex-piece-pairs if they belong to faraway mesh-pairs
+        near_mask = s2s_min_sct < margin  # (b, p)
+        near_cp_mask = near_mask.gather(1, batched_pair_idx)  # (b, k)
+
+        # prune convex-piece-pair if min >= max_sct
+        valid = s2s_min - s2s_max_sct.gather(1, batched_pair_idx)  # (b, k)
+        valid_idx = (
+            torch.where(((valid < 0) & near_cp_mask).view(-1))[0].cpu().numpy()
+        )
+
         n_cvx_pair = valid.shape[-1]
         n_valid = len(valid_idx)
         dist_out = np.ones((n_batch, n_mesh_pair)) * 100
         normal_out = np.zeros((n_batch, n_mesh_pair, 3))
+        normal_out[..., 0] = 1
         wp1_out = np.zeros((n_batch, n_mesh_pair, 3))
         wp2_out = np.zeros((n_batch, n_mesh_pair, 3))
         min_idx_out = np.zeros((n_batch, n_mesh_pair), dtype=np.uintp)
-        batched_coal_distance(
-            cvx_lst,
-            cfg._cl2cp_idx1.cpu().numpy().reshape(-1),
-            T1.cpu().numpy().reshape(-1),
-            cfg._cl2cp_idx2.cpu().numpy().reshape(-1),
-            T2.cpu().numpy().reshape(-1),
-            cfg._cp2mp_idx.cpu().numpy().reshape(-1),
-            valid_idx,
-            n_batch,
-            n_cvx_pair,
-            n_mesh_pair,
-            n_valid,
-            cfg.n_thread,
-            dist_out.reshape(-1),
-            normal_out.reshape(-1),
-            wp1_out.reshape(-1),
-            wp2_out.reshape(-1),
-            min_idx_out.reshape(-1),
-        )
+
+        # Narrow-phase GJK
+        if n_valid > 0:
+            batched_coal_distance(
+                cvx_lst,
+                cfg._cl2cp_idx1.cpu().numpy().reshape(-1),
+                T1.cpu().numpy().reshape(-1),
+                cfg._cl2cp_idx2.cpu().numpy().reshape(-1),
+                T2.cpu().numpy().reshape(-1),
+                cfg._cp2mp_idx.cpu().numpy().reshape(-1),
+                valid_idx,
+                n_batch,
+                n_cvx_pair,
+                n_mesh_pair,
+                n_valid,
+                cfg.n_thread,
+                dist_out.reshape(-1),
+                normal_out.reshape(-1),
+                wp1_out.reshape(-1),
+                wp2_out.reshape(-1),
+                min_idx_out.reshape(-1),
+            )
+
         dist, normal = ts.to(dist_out), ts.to(normal_out)
         wp1, wp2 = ts.to(wp1_out), ts.to(wp2_out)
         d_sign = 2 * (dist > 0) - 1
@@ -166,7 +191,16 @@ class _BaseCollision(torch.autograd.Function):
             logging.warning(f"Distance {dist.max()}")
 
         cfg._cvx_min_idx = ts.to_idx(min_idx_out)
+        cfg._near_mask = ts.to_idx(near_mask)
         ctx.cfg = cfg
         ctx.vis = vis
         ctx.save_for_backward(T1, T2, dist, normal, wp1, wp2)
         return wp1, wp2, normal, d_sign
+
+    @staticmethod
+    def pre_backward_logic(ctx, grad_wp1, grad_wp2, grad_n):
+        cfg: _BaseConfig = ctx.cfg
+        grad_wp1 = grad_wp1 * cfg._near_mask.unsqueeze(-1)
+        grad_wp2 = grad_wp2 * cfg._near_mask.unsqueeze(-1)
+        grad_n = grad_n * cfg._near_mask.unsqueeze(-1)
+        return grad_wp1, grad_wp2, grad_n

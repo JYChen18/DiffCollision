@@ -60,6 +60,26 @@ class DCMesh:
         return DCMesh(tm, tm, cvx_lst, ts.to(sphere_lst))
 
     @staticmethod
+    def from_trimesh(
+        cm: trimesh.Trimesh,
+        fm_lst: list[trimesh.Trimesh],
+        ts: DCTensorSpec = DCTensorSpec(),
+    ):
+        # cm = cm.convex_hull
+        fm_lst = [part.convex_hull for part in fm_lst]
+        fm = trimesh.util.concatenate(fm_lst)
+
+        sphere_lst = []
+        cvx_lst = []
+        for mesh in fm_lst:
+            center, radius = trimesh.nsphere.minimum_nsphere(mesh)
+            sphere_lst.append(np.concatenate([center, [radius]]))
+            cvx_lst.append(get_convex_from_data(mesh.vertices))
+        sphere_lst = np.stack(sphere_lst)
+
+        return DCMesh(cm, fm, cvx_lst, ts.to(sphere_lst))
+
+    @staticmethod
     def from_file(
         obj_path: str,
         scale: float = 1.0,
