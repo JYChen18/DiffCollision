@@ -4,15 +4,7 @@ from diffcollision.io import DCMesh
 from diffcollision.utils import DCTensorSpec
 
 
-def get_link_names_from_mjmodel(model):
-    link_names = []
-    for i in range(model.nbody):
-        name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, i)
-        link_names.append(name)
-    return link_names
-
-
-def get_mesh_from_mjmodel(model, link_names=None, ts: DCTensorSpec = DCTensorSpec()):
+def get_mesh_from_mjmodel(model: mujoco.MjModel, ts: DCTensorSpec = DCTensorSpec()):
     link_meshes_visual = {}
     link_meshes_collision = {}
     for idx in range(model.ngeom):
@@ -49,25 +41,21 @@ def get_mesh_from_mjmodel(model, link_names=None, ts: DCTensorSpec = DCTensorSpe
         mesh.apply_transform(T_geom)
 
         body_id = model.geom_bodyid[idx]
-        if link_names is None:
-            link_names = get_link_names_from_mjmodel(model)
+        name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, body_id)
         contype = model.geom_contype[idx]
         conaffinity = model.geom_conaffinity[idx]
         is_visual = contype == 0 and conaffinity == 0
         if is_visual:
-            link_meshes_visual.setdefault(link_names[body_id], []).append(mesh)
+            link_meshes_visual.setdefault(name, []).append(mesh)
         else:
-            link_meshes_collision.setdefault(link_names[body_id], []).append(mesh)
+            link_meshes_collision.setdefault(name, []).append(mesh)
 
     for name, meshes in link_meshes_visual.items():
         link_meshes_visual[name] = trimesh.util.concatenate(meshes)
 
     link_to_dcmesh = {}
-    for name in link_names:
-        if name not in link_meshes_collision.keys():
-            continue
+    for name in link_meshes_collision.keys():
         fm_lst = link_meshes_collision[name]
-        cm = None
         if name in link_meshes_visual.keys():
             cm = link_meshes_visual[name]
         else:

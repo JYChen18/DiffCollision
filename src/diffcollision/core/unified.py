@@ -9,11 +9,7 @@ from diffcollision.core.rs0 import RS0Collision, RS0Config
 from diffcollision.core.fd import FDCollision, FDConfig
 from diffcollision.core.analytical import AnalyticalCollision, AnalyticalConfig
 from diffcollision.io import DCMesh
-from diffcollision.mjmesh import (
-    get_mesh_from_mjmodel,
-    get_link_names_from_mjmodel,
-    get_exclude_pairs_from_mjmodel,
-)
+from diffcollision.mjmesh import get_mesh_from_mjmodel, get_exclude_pairs_from_mjmodel
 from diffcollision.core.base import _BaseConfig as DCBaseConfig
 
 DIFFCOLL_CONFIG_REGISTRY = {
@@ -141,6 +137,7 @@ class DiffCollision:
         self,
         meshes: list[DCMesh] = None,
         collision_pairs: list[tuple[int, int]] | torch.Tensor = None,
+        mesh_names: list[str] = None,
         method: str = "RS1Dist",
         enable_debug: bool = False,
         **kwargs,
@@ -176,8 +173,12 @@ class DiffCollision:
         filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_fields}
 
         self.cfg = config_cls(
-            _meshes=meshes, _collision_pairs=collision_pairs, **filtered_kwargs
+            _meshes=meshes,
+            _collision_pairs=collision_pairs,
+            _mesh_names=mesh_names,
+            **filtered_kwargs,
         )
+
         self.func_cls = func_cls
         self.debug_dict = DCDebugDict(meshes=meshes) if enable_debug else None
 
@@ -191,18 +192,19 @@ class DiffCollision:
         ts = DCTensorSpec()
         if "tp1_o" in kwargs and kwargs["tp1_o"] is not None:
             ts = DCTensorSpec(kwargs["tp1_o"].device, kwargs["tp1_o"].dtype)
-        link_names = get_link_names_from_mjmodel(mj_model)
-        dcmesh_dict = get_mesh_from_mjmodel(mj_model, link_names, ts)
-        running_links = list(dcmesh_dict.keys())
+        dcmesh_dict = get_mesh_from_mjmodel(mj_model, ts)
+        mesh_names = list(dcmesh_dict.keys())
         meshes = list(dcmesh_dict.values())
         excluded_link_pairs = get_exclude_pairs_from_mjmodel(mj_model)
         collision_pairs = []
-        for i in range(len(running_links)):
-            for j in range(i + 1, len(running_links)):
-                link1, link2 = running_links[i], running_links[j]
+        for i in range(len(mesh_names)):
+            for j in range(i + 1, len(mesh_names)):
+                link1, link2 = mesh_names[i], mesh_names[j]
                 if (link1, link2) not in excluded_link_pairs:
                     collision_pairs.append((i, j))
-        return DiffCollision(meshes, collision_pairs, method, enable_debug, **kwargs)
+        return DiffCollision(
+            meshes, collision_pairs, mesh_names, method, enable_debug, **kwargs
+        )
 
     def forward(
         self,

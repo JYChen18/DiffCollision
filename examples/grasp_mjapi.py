@@ -9,7 +9,6 @@ import torch
 import pytorch_kinematics as pk
 from diffcollision.utils import DCTensorSpec
 from diffcollision import DCMesh, DiffCollision
-from diffcollision.mjmesh import get_link_names_from_mjmodel
 
 from util.vis import vis_usd
 from util.rotation import set_seed, torch_normalize_vector, torch_quaternion_to_matrix
@@ -24,10 +23,6 @@ def main(cfg):
     collision_num = 5
 
     npy_path = "examples/assets/grasp.npy"
-    xml_path = "examples/assets/hand/shadow/right.xml"
-    hand_model = mujoco.MjModel.from_xml_path(xml_path)
-    hand_body_name = get_link_names_from_mjmodel(hand_model)[1:]
-
     data = np.load(npy_path, allow_pickle=True).item()
 
     tp1_o = ts.to(
@@ -47,6 +42,7 @@ def main(cfg):
     diffcoll = DiffCollision.build_from_mjmodel(
         model, tp1_o=tp1_o, tp2_o=tp2_o, **dcd_cfg
     )
+    hand_body_name = diffcoll.cfg._mesh_names[:-1]
 
     T_obj = ts.to(torch.eye(4)[None])
     joint_angle = ts.to(data["grasp_qpos"])
@@ -54,6 +50,7 @@ def main(cfg):
     joint_angle.requires_grad_()
 
     # Forward kinematics
+    xml_path = "examples/assets/hand/shadow/right.xml"
     mjcf_string = open(xml_path).read()
     rel_mesh_path = mjcf_string.split('meshdir="')[-1].split('"')[0]
     abs_mesh_path = os.path.join(os.path.dirname(xml_path), rel_mesh_path)

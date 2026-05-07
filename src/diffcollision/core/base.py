@@ -19,18 +19,23 @@ class _BaseConfig:
     egt: bool = True  # whether to enable equivalent gradient transport
     egt_step_r: float = 1.0  # the relative step between r and t matters
     egt_step_t: float = 0.001  # the relative step between r and t matters
-    margin: float = 10.0    # convex-piece pairs with distance greater than margin are pruned in broad phase
+    margin: float = (
+        10.0  # convex-piece pairs with distance greater than margin are pruned in broad phase
+    )
 
     # --- Internal Fields ---
     _meshes: list[DCMesh] = None
     _collision_pairs: list[tuple[int, int]] | torch.Tensor = None
+    _mesh_names: list[str] = None
     _cvx_lst: list = None
     _sph_lst: torch.Tensor = None
     _ts: DCTensorSpec = None
     _warp_sphere_dist: _WarpSphereDist = None  # Save GPU memory (<1/10 of pytorch ops)
 
     _cvx_n_sum: torch.Tensor = None
-    _cvx_min_idx: torch.Tensor = None  # convex piece id that the witness point lies on, only used for neighbor sampling
+    _cvx_min_idx: torch.Tensor = (
+        None  # convex piece id that the witness point lies on, only used for neighbor sampling
+    )
     _near_mask: torch.Tensor = None
     _ml2mp_idx1: torch.Tensor = None  # mesh list -> mesh pair
     _ml2mp_idx2: torch.Tensor = None
@@ -149,9 +154,7 @@ class _BaseCollision(torch.autograd.Function):
 
         # prune convex-piece-pair if min >= max_sct
         valid = s2s_min - s2s_max_sct.gather(1, batched_pair_idx)  # (b, k)
-        valid_idx = (
-            torch.where(((valid < 0) & near_cp_mask).view(-1))[0].cpu().numpy()
-        )
+        valid_idx = torch.where(((valid < 0) & near_cp_mask).view(-1))[0].cpu().numpy()
 
         n_cvx_pair = valid.shape[-1]
         n_valid = len(valid_idx)
