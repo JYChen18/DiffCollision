@@ -11,8 +11,9 @@ from diffcollision.core.analytical import AnalyticalCollision, AnalyticalConfig
 from diffcollision.io import DCMesh
 from diffcollision.mjmesh import get_mesh_from_mjmodel, get_exclude_pairs_from_mjmodel
 from diffcollision.core.base import _BaseConfig as DCBaseConfig
+from diffcollision.core.base import _BaseCollision as DCBaseCollision
 
-DIFFCOLL_CONFIG_REGISTRY = {
+DIFFCOLL_CONFIG_REGISTRY: dict[str, type[DCBaseConfig]] = {
     "RS1Dist": RS1DistConfig,
     "RS1Dir": RS1DirConfig,
     "RS0": RS0Config,
@@ -20,7 +21,7 @@ DIFFCOLL_CONFIG_REGISTRY = {
     "Analytical": AnalyticalConfig,
 }
 
-DIFFCOLL_FUNC_REGISTRY = {
+DIFFCOLL_FUNC_REGISTRY: dict[str, type[DCBaseCollision]] = {
     "RS1Dist": RS1DistCollision,
     "RS1Dir": RS1DirCollision,
     "RS0": RS0Collision,
@@ -83,6 +84,7 @@ class DCResult:
     wp2: torch.Tensor
     normal: torch.Tensor
     sdf: torch.Tensor
+    cpidx: torch.Tensor
 
     wp1_o: torch.Tensor = None
     wp2_o: torch.Tensor = None
@@ -243,15 +245,15 @@ class DiffCollision:
                 T1, T2, self.cfg.egt_step_r, self.cfg.egt_step_t
             )
 
-        wp1, wp2, normal, d_sign = self.func_cls.apply(
+        wp1_all, wp2_all, normal_all, d_sign, near_mask = self.func_cls.apply(
             T1_egt, T2_egt, self.cfg, self.debug_dict if not skip_debug else None
         )
 
         if self.debug_dict is not None and not skip_debug:
             with torch.no_grad():
                 self.debug_dict.transforms.append(transforms.detach().cpu())
-                self.debug_dict.wp1.append(wp1.detach().cpu())
-                self.debug_dict.wp2.append(wp2.detach().cpu())
+                self.debug_dict.wp1.append(wp1_all.detach().cpu())
+                self.debug_dict.wp2.append(wp2_all.detach().cpu())
                 if self.cfg.tp1_o is not None and self.cfg.tp2_o is not None:
                     tp1 = (
                         torch.einsum("bkij,bkj->bki", T1[..., :3, :3], self.cfg.tp1_o)
@@ -267,21 +269,57 @@ class DiffCollision:
         # NOTE: The following normal's gradient will have numerical issues when wp1 is close to wp2.
         # We have only implemented a smooth normal derivative for `method=RS1Dist`.
         if self.func_cls != RS1DistCollision:
-            normal = d_sign.unsqueeze(-1) * torch_normalize_vector(wp2 - wp1)
+            normal_all = d_sign.unsqueeze(-1) * torch_normalize_vector(
+                wp2_all - wp1_all
+            )
 
-        signed_dist = d_sign * (wp2 - wp1).norm(dim=-1)
+        sdf_all = d_sign * (wp2_all - wp1_all).norm(dim=-1)
         if return_local:  # NOTE: use T_egt to ensure correct gradient flow
-            wp1_o = torch.einsum(
-                "bpji,bpj->bpi", T1_egt[..., :3, :3], wp1 - T1_egt[..., :3, 3]
+            all_wp1_o = torch.einsum(
+                "bpji,bpj->bpi", T1_egt[..., :3, :3], wp1_all - T1_egt[..., :3, 3]
             )
-            wp2_o = torch.einsum(
-                "bpji,bpj->bpi", T2_egt[..., :3, :3], wp2 - T2_egt[..., :3, 3]
+            all_wp2_o = torch.einsum(
+                "bpji,bpj->bpi", T2_egt[..., :3, :3], wp2_all - T2_egt[..., :3, 3]
             )
-            n1_o = torch.einsum("bpji,bpj->bpi", T1_egt[..., :3, :3], normal)
-            n2_o = torch.einsum("bpji,bpj->bpi", T2_egt[..., :3, :3], -normal)
+            all_n1_o = torch.einsum("bpji,bpj->bpi", T1_egt[..., :3, :3], normal_all)
+            all_n2_o = torch.einsum("bpji,bpj->bpi", T2_egt[..., :3, :3], -normal_all)
+
+        # gather valid contacts according to near_mask
+        ts = DCTensorSpec(T1.device, T1.dtype)
+        n_batch = T1.shape[0]
+        slot_idx = ts.to_idx(near_mask.cumsum(dim=1)) - 1
+        take_mask = near_mask & (slot_idx < self.cfg.per_env_max_contact_num)
+        wp1 = ts.to(torch.zeros(n_batch, self.cfg.per_env_max_contact_num, 3))
+        wp2 = ts.to(torch.zeros(n_batch, self.cfg.per_env_max_contact_num, 3))
+        normal = ts.to(torch.zeros(n_batch, self.cfg.per_env_max_contact_num, 3))
+        sdf = ts.to(
+            torch.full((n_batch, self.cfg.per_env_max_contact_num), float("inf"))
+        )
+        cpidx = ts.to_idx(
+            torch.full((n_batch, self.cfg.per_env_max_contact_num, 2), -1)
+        ).cpu()
+
+        batch_ids, pair_ids = torch.where(take_mask)
+        slot_ids = slot_idx[batch_ids, pair_ids]
+        wp1[batch_ids, slot_ids] = wp1_all[batch_ids, pair_ids]
+        wp2[batch_ids, slot_ids] = wp2_all[batch_ids, pair_ids]
+        normal[batch_ids, slot_ids] = normal_all[batch_ids, pair_ids]
+        sdf[batch_ids, slot_ids] = sdf_all[batch_ids, pair_ids]
+        cpidx[batch_ids, slot_ids] = self.cfg._collision_pairs[pair_ids.cpu()]
+
+        if return_local:
+            wp1_o = ts.to(torch.zeros(n_batch, self.cfg.per_env_max_contact_num, 3))
+            wp2_o = ts.to(torch.zeros(n_batch, self.cfg.per_env_max_contact_num, 3))
+            n1_o = ts.to(torch.zeros(n_batch, self.cfg.per_env_max_contact_num, 3))
+            n2_o = ts.to(torch.zeros(n_batch, self.cfg.per_env_max_contact_num, 3))
+            wp1_o[batch_ids, slot_ids] = all_wp1_o[batch_ids, pair_ids]
+            wp2_o[batch_ids, slot_ids] = all_wp2_o[batch_ids, pair_ids]
+            n1_o[batch_ids, slot_ids] = all_n1_o[batch_ids, pair_ids]
+            n2_o[batch_ids, slot_ids] = all_n2_o[batch_ids, pair_ids]
         else:
             wp1_o = wp2_o = n1_o = n2_o = None
-        return DCResult(wp1, wp2, normal, signed_dist, wp1_o, wp2_o, n1_o, n2_o)
+
+        return DCResult(wp1, wp2, normal, sdf, cpidx, wp1_o, wp2_o, n1_o, n2_o)
 
     def update_collision_pairs(
         self,

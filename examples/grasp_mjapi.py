@@ -75,10 +75,21 @@ def main(cfg):
             transforms.append(T2_dict[bn])
         transforms.append(T_obj)
         res = diffcoll.forward(torch.stack(transforms, dim=1))
+        if i == 0:
+            print(res.wp1)
+            print(res.sdf)
+            print(res.cpidx)
         loss = (
-            ((res.wp1 - res.wp2 + cfg.margin * res.normal) ** 2).sum()
-            + ((tp1_o - res.wp1_o) ** 2).sum()
-            + ((tp2_o - res.wp2_o) ** 2).sum()
+            (
+                (
+                    res.wp1[:, :collision_num]
+                    - res.wp2[:, :collision_num]
+                    + cfg.margin * res.normal[:, :collision_num]
+                )
+                ** 2
+            ).sum()
+            + ((tp1_o - res.wp1_o[:, :collision_num]) ** 2).sum()
+            + ((tp2_o - res.wp2_o[:, :collision_num]) ** 2).sum()
         ) / collision_num
 
         loss.backward()

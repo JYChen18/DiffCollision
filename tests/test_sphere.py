@@ -17,7 +17,7 @@ def test_forward(mesh_lst, ts):
 
     diffcoll = DiffCollision(mesh_lst)
     res = diffcoll.forward(T, return_local=False)
-    assert torch.isclose(res.sdf, ts.to(0.3))
+    assert torch.isclose(res.sdf[0, 0], ts.to(0.3))
     logging.info("Pass forward test")
 
 
@@ -70,9 +70,9 @@ def test_backward_hard(mesh_lst, ts):
         T = torch.stack([T1, T2], dim=-3)
         res = diffcoll.forward(T)
         loss = (
-            ((res.wp1 - res.wp2) ** 2).sum()
-            + ((tp1_o - res.wp1_o) ** 2).sum()
-            + ((tp2_o - res.wp2_o) ** 2).sum()
+            ((res.wp1[:, 0] - res.wp2[:, 0]) ** 2).sum()
+            + ((tp1_o[:, 0] - res.wp1_o[:, 0]) ** 2).sum()
+            + ((tp2_o[:, 0] - res.wp2_o[:, 0]) ** 2).sum()
         )
         loss.backward()
         with torch.no_grad():

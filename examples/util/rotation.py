@@ -208,9 +208,9 @@ def sample_target_point(
 
         res = diffcoll.forward(torch.stack([T1, T2], dim=-3), return_local=False)
         tp2_w = torch.einsum("bij, bj->bi", r_rel, tp2) + t_rel
-        error = (res.wp1.squeeze(1) - tp1).norm(dim=-1) + (
-            res.wp2.squeeze(1) - tp2_w
-        ).norm(dim=-1)
+        error = (res.wp1[:, 0] - tp1).norm(dim=-1) + (res.wp2[:, 0] - tp2_w).norm(
+            dim=-1
+        )
         vind = torch.where(error < 1e-2)[0]
 
         final_tp1 = torch.cat([final_tp1, tp1[vind]], dim=0)[:n_tp]
