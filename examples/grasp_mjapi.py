@@ -76,9 +76,13 @@ def main(cfg):
         transforms.append(T_obj)
         res = diffcoll.forward(torch.stack(transforms, dim=1))
         if i == 0:
-            print(res.wp1)
-            print(res.sdf)
-            print(res.cpidx)
+            print(f"wp1: {res.wp1}")
+            print(f"sdf: {res.sdf}")
+            print(f"cpidx: {res.cpidx}")
+            print(f"normal: {res.normal}")
+            cpidx = res.cpidx.tolist()[0]
+            names = diffcoll.cfg._mesh_names
+            print([(names[cpidx[i][0]], names[cpidx[i][1]]) for i in range(5)])
         loss = (
             (
                 (

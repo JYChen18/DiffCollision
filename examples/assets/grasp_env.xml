@@ -76,6 +76,7 @@
   </asset>
   <worldbody>
     <body name="rh_palm" pos="0 0 0.034">
+      <freejoint/>
       <inertial mass="0.3" pos="0 0 0.035" quat="1 0 0 1" diaginertia="0.0005287 0.0003581 0.000191" />
       <site name="grasp_site" pos="0 -.035 0.09" group="4" />
       <geom class="plastic_visual" mesh="palm" />
@@ -220,6 +221,7 @@
       </body>
     </body>
     <body name="obj" pos="0 0 0" quat="1 0 0 0">
+      <freejoint/>
       <geom name="object_visual_0" type="mesh" contype="0" conaffinity="0" density="0" mesh="convex_piece_001.obj" />
       <geom name="object_collision_0" type="mesh" mesh="convex_piece_001.obj" />
       <geom name="object_visual_1" type="mesh" contype="0" conaffinity="0" density="0" mesh="convex_piece_000.obj" />
