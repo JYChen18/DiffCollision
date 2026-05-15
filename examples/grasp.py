@@ -180,9 +180,11 @@ def main(cfg):
         transforms.append(T_obj)
         res = diffcoll.forward(torch.stack(transforms, dim=1))
         loss = (
-            ((res.wp1 - res.wp2 + cfg.margin * res.normal) ** 2).sum()
-            + ((tp1_o - res.wp1_o) ** 2).sum()
-            + ((tp2_o - res.wp2_o) ** 2).sum()
+            (
+                (res.wp1[:, :5] - res.wp2[:, :5] + cfg.margin * res.normal[:, :5]) ** 2
+            ).sum()
+            + ((tp1_o[:, :5] - res.wp1_o[:, :5]) ** 2).sum()
+            + ((tp2_o[:, :5] - res.wp2_o[:, :5]) ** 2).sum()
         ) / len(collision_pairs)
 
         loss.backward()

@@ -120,9 +120,9 @@ def single_problem(prob_id, cfg):
             T2.grad = None
         res = diffcoll.forward(torch.stack([T1, T2], dim=-3))
         loss = (
-            ((res.wp1 - res.wp2 + cfg.margin * res.normal) ** 2).sum()
-            + ((tp1_o - res.wp1_o) ** 2).sum()
-            + ((tp2_o - res.wp2_o) ** 2).sum()
+            ((res.wp1[:, 0] - res.wp2[:, 0] + cfg.margin * res.normal[:, 0]) ** 2).sum()
+            + ((tp1_o[:, 0] - res.wp1_o[:, 0]) ** 2).sum()
+            + ((tp2_o[:, 0] - res.wp2_o[:, 0]) ** 2).sum()
         )
         loss.backward()
         with torch.no_grad():
@@ -148,10 +148,12 @@ def single_problem(prob_id, cfg):
     with torch.no_grad():
         res = diffcoll.forward(torch.stack([T1, T2], dim=-3), skip_debug=True)
         final_loss = (
-            ((res.wp1 - res.wp2 + cfg.margin * res.normal) ** 2).sum(dim=-1)
-            + ((tp1_o - res.wp1_o) ** 2).sum(dim=-1)
-            + ((tp2_o - res.wp2_o) ** 2).sum(dim=-1)
-        ).squeeze(1)
+            ((res.wp1[:, 0] - res.wp2[:, 0] + cfg.margin * res.normal[:, 0]) ** 2).sum(
+                dim=-1
+            )
+            + ((tp1_o[:, 0] - res.wp1_o[:, 0]) ** 2).sum(dim=-1)
+            + ((tp2_o[:, 0] - res.wp2_o[:, 0]) ** 2).sum(dim=-1)
+        )
 
         Err_Med = torch.quantile(final_loss, 0.5)
         Err_D9 = torch.quantile(final_loss, 0.9, interpolation="nearest")

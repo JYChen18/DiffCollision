@@ -22,6 +22,7 @@ class _BaseConfig:
     margin: float = (
         10.0  # convex-piece pairs with distance greater than margin are pruned in broad phase
     )
+    per_env_max_contact_num: int = 20
 
     # --- Internal Fields ---
     _meshes: list[DCMesh] = None
@@ -151,6 +152,8 @@ class _BaseCollision(torch.autograd.Function):
         # prune convex-piece-pairs if they belong to faraway mesh-pairs
         near_mask = s2s_min_sct < margin  # (b, p)
         near_cp_mask = near_mask.gather(1, batched_pair_idx)  # (b, k)
+        if torch.any(near_mask.sum(dim=-1) > cfg.per_env_max_contact_num):
+            logging.warning("Valid contact number exceeds per_env_max_contact_num")
 
         # prune convex-piece-pair if min >= max_sct
         valid = s2s_min - s2s_max_sct.gather(1, batched_pair_idx)  # (b, k)
@@ -158,9 +161,8 @@ class _BaseCollision(torch.autograd.Function):
 
         n_cvx_pair = valid.shape[-1]
         n_valid = len(valid_idx)
-        dist_out = np.ones((n_batch, n_mesh_pair)) * 100
+        dist_out = np.zeros((n_batch, n_mesh_pair))
         normal_out = np.zeros((n_batch, n_mesh_pair, 3))
-        normal_out[..., 0] = 1
         wp1_out = np.zeros((n_batch, n_mesh_pair, 3))
         wp2_out = np.zeros((n_batch, n_mesh_pair, 3))
         min_idx_out = np.zeros((n_batch, n_mesh_pair), dtype=np.uintp)
@@ -189,16 +191,18 @@ class _BaseCollision(torch.autograd.Function):
 
         dist, normal = ts.to(dist_out), ts.to(normal_out)
         wp1, wp2 = ts.to(wp1_out), ts.to(wp2_out)
+        cvx_min_idx = ts.to_idx(min_idx_out)
+        cvx_min_idx[~near_mask] = 0
         d_sign = 2 * (dist > 0) - 1
-        if dist.max() > 1:
-            logging.warning(f"Distance {dist.max()}")
+        if dist[near_mask].shape[0] and dist[near_mask].max() > 1:
+            logging.warning(f"Distance {dist[near_mask].max()}")
 
-        cfg._cvx_min_idx = ts.to_idx(min_idx_out)
+        cfg._cvx_min_idx = cvx_min_idx
         cfg._near_mask = ts.to_idx(near_mask)
         ctx.cfg = cfg
         ctx.vis = vis
         ctx.save_for_backward(T1, T2, dist, normal, wp1, wp2)
-        return wp1, wp2, normal, d_sign
+        return wp1, wp2, normal, d_sign, near_mask
 
     @staticmethod
     def pre_backward_logic(ctx, grad_wp1, grad_wp2, grad_n):

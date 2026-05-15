@@ -22,7 +22,7 @@ def test_update_collision_pairs_forward(mesh_lst, collision_pairs, shuffle_lst):
     diffcoll.update_collision_pairs(new_coll_pair)
 
     res2 = diffcoll.forward(T, return_local=False)
-    assert (res1.sdf[:, shuffle_lst] - res2.sdf).abs().max() < 1e-10
+    assert (res1.sdf[:, shuffle_lst] - res2.sdf[:, :3]).abs().max() < 1e-10
     logging.info("Pass forward test")
 
 
@@ -51,9 +51,9 @@ def test_update_collision_pairs_backward(mesh_lst, collision_pairs, shuffle_lst)
             T.grad = None
         res = diffcoll.forward(T)
         loss = (
-            ((res.wp1 - res.wp2) ** 2).sum()
-            + ((tp1_o - res.wp1_o) ** 2).sum()
-            + ((tp2_o - res.wp2_o) ** 2).sum()
+            ((res.wp1[:, :3] - res.wp2[:, :3]) ** 2).sum()
+            + ((tp1_o[:, :3] - res.wp1_o[:, :3]) ** 2).sum()
+            + ((tp2_o[:, :3] - res.wp2_o[:, :3]) ** 2).sum()
         )
         loss.backward()
         with torch.no_grad():
@@ -77,9 +77,9 @@ def test_update_collision_pairs_backward(mesh_lst, collision_pairs, shuffle_lst)
             T.grad = None
         res = diffcoll.forward(T)
         loss = (
-            ((res.wp1 - res.wp2) ** 2).sum()
-            + ((tp1_o - res.wp1_o) ** 2).sum()
-            + ((tp2_o - res.wp2_o) ** 2).sum()
+            ((res.wp1[:, :3] - res.wp2[:, :3]) ** 2).sum()
+            + ((tp1_o[:, :3] - res.wp1_o[:, :3]) ** 2).sum()
+            + ((tp2_o[:, :3] - res.wp2_o[:, :3]) ** 2).sum()
         )
         loss.backward()
         with torch.no_grad():

@@ -39,8 +39,10 @@ class FDConfig(_BaseConfig):
 
 class FDCollision(_BaseCollision):
     @staticmethod
-    def backward(ctx, grad_wp1, grad_wp2, grad_n, grad_d_sign):
-        grad_wp1, grad_wp2, grad_n = _BaseCollision.pre_backward_logic(ctx, grad_wp1, grad_wp2, grad_n)
+    def backward(ctx, grad_wp1, grad_wp2, grad_n, grad_d_sign, grad_mask):
+        grad_wp1, grad_wp2, grad_n = _BaseCollision.pre_backward_logic(
+            ctx, grad_wp1, grad_wp2, grad_n
+        )
         T1, T2, _, _, _, _ = ctx.saved_tensors  # batched
         cfg: FDConfig = ctx.cfg
         eps_r, eps_t, ts = cfg.eps_r, cfg.eps_t, cfg._ts
