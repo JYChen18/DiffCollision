@@ -111,8 +111,8 @@ class RS1DistConfig(_BaseConfig):
         self._gs_o_pair = self._gs_o_mesh[m2g_idx].repeat(batch, 1, 1)
         return
 
-    def update_collision_pairs(self, collision_pairs, tp1_o, tp2_o):
-        super().update_collision_pairs(collision_pairs, tp1_o, tp2_o)
+    def update_collision_pairs(self, collision_pairs, tp1_o, tp2_o, margin=None):
+        super().update_collision_pairs(collision_pairs, tp1_o, tp2_o, margin)
         self._gs_o_pair = self._dthre_pair = self._min_dthre_pair = None
         return
 

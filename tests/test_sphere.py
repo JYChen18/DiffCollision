@@ -1,14 +1,33 @@
-import torch
-import trimesh
 import logging
 import sys
 import os
+from pathlib import Path
+
+import pytest
+import torch
+import trimesh
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+SRC_DIR = ROOT_DIR / "src"
+sys.path.insert(0, str(SRC_DIR))
+sys.path.insert(0, str(ROOT_DIR))
 
 from diffcollision import DCMesh, DiffCollision, DCTensorSpec
 from diffcollision.utils import torch_matrix_grad_to_se3, torch_se3_exp_map
-
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from examples.util.rotation import set_seed
+
+
+@pytest.fixture(scope="module")
+def ts():
+    return DCTensorSpec(dtype="double")
+
+
+@pytest.fixture(scope="module")
+def mesh_lst(ts):
+    sphere = trimesh.primitives.Sphere(radius=0.1, subdivisions=5)
+    mesh1 = DCMesh.from_data(sphere.vertices, sphere.faces, ts)
+    mesh2 = DCMesh.from_data(sphere.vertices, sphere.faces, ts)
+    return [mesh1, mesh2]
 
 
 def test_forward(mesh_lst, ts):
@@ -87,7 +106,7 @@ def test_backward_hard(mesh_lst, ts):
 
         vis_usd(diffcoll.get_debug_dict(), [0], "output/sphere")
     except ImportError:
-        raise ImportError(
+        logging.info(
             "Core library verified. For USD visualization: `pip install -e '.[examples]'`"
         )
 

@@ -19,15 +19,19 @@ class _BaseConfig:
     egt: bool = True  # whether to enable equivalent gradient transport
     egt_step_r: float = 1.0  # the relative step between r and t matters
     egt_step_t: float = 0.001  # the relative step between r and t matters
-    margin: float = (
+    margin: float | list | torch.Tensor = (
         10.0  # convex-piece pairs with distance greater than margin are pruned in broad phase
     )
     per_env_max_contact_num: int = 20
 
     # --- Internal Fields ---
     _meshes: list[DCMesh] = None
-    _collision_pairs: list[tuple[int, int]] | torch.Tensor = None
-    _mesh_names: list[str] = None
+    _mesh_ids: list[int] | torch.Tensor = None
+    # External/public mesh id pairs, e.g. MuJoCo body ids. Returned in cpidx.
+    _mesh_pair_ids: list[tuple[int, int]] | torch.Tensor = None
+    # Internal compact mesh-list index pairs. Used only for tensor indexing.
+    _mesh_pair_indices: torch.Tensor = None
+    _margin: torch.Tensor = None
     _cvx_lst: list = None
     _sph_lst: torch.Tensor = None
     _ts: DCTensorSpec = None
@@ -38,7 +42,7 @@ class _BaseConfig:
         None  # convex piece id that the witness point lies on, only used for neighbor sampling
     )
     _near_mask: torch.Tensor = None
-    _ml2mp_idx1: torch.Tensor = None  # mesh list -> mesh pair
+    _ml2mp_idx1: torch.Tensor = None  # mesh list index -> mesh pair
     _ml2mp_idx2: torch.Tensor = None
     _cl2cp_idx1: torch.Tensor = None  # convex piece list -> convex piece pair
     _cl2cp_idx2: torch.Tensor = None
@@ -68,14 +72,21 @@ class _BaseConfig:
         self._warp_sphere_dist = _WarpSphereDist(self._ts)
 
         n_mesh = len(self._meshes)
-        if self._collision_pairs is None:
-            self._collision_pairs = torch.triu_indices(n_mesh, n_mesh, offset=1).T
-        elif not isinstance(self._collision_pairs, torch.Tensor):
-            self._collision_pairs = torch.tensor(self._collision_pairs)
+        if self._mesh_ids is None:
+            self._mesh_ids = range(n_mesh)
+        self._mesh_ids = self._ts.to_idx(self._mesh_ids)
         assert (
-            len(self._collision_pairs.shape) == 2
-            and self._collision_pairs.shape[-1] == 2
-        ), "collision_pairs should be a list of tuple of two mesh indices or a tensor of shape (n_pair, 2)"
+            len(self._mesh_ids.shape) == 1 and self._mesh_ids.shape[0] == n_mesh
+        ), "mesh_ids should be a list or tensor with one id for each mesh"
+        assert (
+            len(set(self._mesh_ids.tolist())) == n_mesh
+        ), "mesh_ids should be unique"
+
+        if self._mesh_pair_ids is None:
+            self._mesh_pair_indices = self._ts.to_idx(
+                torch.triu_indices(n_mesh, n_mesh, offset=1).T
+            )
+            self._mesh_pair_ids = self._mesh_ids[self._mesh_pair_indices]
 
         self._sph_lst = []
         self._cvx_lst = []
@@ -87,32 +98,66 @@ class _BaseConfig:
             self._cvx_n_sum.append(n_cvx_sum)
             n_cvx_sum += m.n_cvx
         self._sph_lst = torch.cat(self._sph_lst, dim=0)
-        self.update_collision_pairs(self._collision_pairs, self.tp1_o, self.tp2_o)
+        self.update_collision_pairs(
+            self._mesh_pair_ids, self.tp1_o, self.tp2_o, self.margin
+        )
         return
 
-    def update_collision_pairs(self, collision_pairs, tp1_o, tp2_o):
-        self._collision_pairs = collision_pairs
+    def _set_mesh_pair_ids(self, mesh_pair_ids):
+        self._mesh_pair_ids = self._ts.to_idx(mesh_pair_ids)
+        assert (
+            len(self._mesh_pair_ids.shape) == 2
+            and self._mesh_pair_ids.shape[-1] == 2
+        ), "collision_pairs should be a list of tuple of two mesh ids or a tensor of shape (n_pair, 2)"
+
+        mesh_id_to_idx = {
+            int(mesh_id): idx for idx, mesh_id in enumerate(self._mesh_ids.tolist())
+        }
+        self._mesh_pair_indices = self._ts.to_idx(
+            [
+                [mesh_id_to_idx[int(idx1)], mesh_id_to_idx[int(idx2)]]
+                for idx1, idx2 in self._mesh_pair_ids.tolist()
+            ]
+        )
+
+    def _set_pair_margins(self, margin):
+        margin = self._ts.to(margin).reshape(-1)
+        if margin.shape[0] == 1:
+            margin = margin.expand(self._mesh_pair_ids.shape[0]).clone()
+        assert margin.shape == (
+            self._mesh_pair_ids.shape[0],
+        ), "margin should be a scalar or a tensor with one value for each collision pair"
+        self.margin = margin
+        self._margin = margin
+
+    def update_collision_pairs(self, collision_pairs, tp1_o, tp2_o, margin=None):
+        self._set_mesh_pair_ids(collision_pairs)
+        self._set_pair_margins(self.margin if margin is None else margin)
         self.tp1_o, self.tp2_o = tp1_o, tp2_o
         self._cp2mp_idx = []
         self._cl2cp_idx1 = []
         self._cl2cp_idx2 = []
         self._mp2cp_idx1 = []
         self._mp2cp_idx2 = []
-        for i, (idx1, idx2) in enumerate(self._collision_pairs):
+        for i, (idx1, idx2) in enumerate(self._mesh_pair_indices.tolist()):
             n_cvx1, n_cvx2 = self._meshes[idx1].n_cvx, self._meshes[idx2].n_cvx
             self._cp2mp_idx.extend([i] * n_cvx1 * n_cvx2)
             self._cl2cp_idx1.append(
-                (self._cvx_n_sum[idx1] + torch.arange(n_cvx1)).repeat(n_cvx2)
+                (self._cvx_n_sum[idx1] + self._ts.to_idx(range(n_cvx1))).repeat(
+                    n_cvx2
+                )
             )
             self._cl2cp_idx2.append(
-                (self._cvx_n_sum[idx2] + torch.arange(n_cvx2)).repeat_interleave(n_cvx1)
+                (
+                    self._cvx_n_sum[idx2] + self._ts.to_idx(range(n_cvx2))
+                ).repeat_interleave(n_cvx1)
             )
-            self._mp2cp_idx1.append(torch.tensor([i] * n_cvx1).repeat(n_cvx2))
+            self._mp2cp_idx1.append(self._ts.to_idx([i] * n_cvx1).repeat(n_cvx2))
             self._mp2cp_idx2.append(
-                torch.tensor([i] * n_cvx2).repeat_interleave(n_cvx1)
+                self._ts.to_idx([i] * n_cvx2).repeat_interleave(n_cvx1)
             )
-        self._ml2mp_idx1 = self._ts.to_idx(self._collision_pairs[..., 0])
-        self._ml2mp_idx2 = self._ts.to_idx(self._collision_pairs[..., 1])
+        self._ml2mp_idx1 = self._ts.to_idx(self._mesh_pair_indices[..., 0])
+        self._ml2mp_idx2 = self._ts.to_idx(self._mesh_pair_indices[..., 1])
         self._cl2cp_idx1 = self._ts.to_idx(torch.cat(self._cl2cp_idx1))
         self._cl2cp_idx2 = self._ts.to_idx(torch.cat(self._cl2cp_idx2))
         self._mp2cp_idx1 = self._ts.to_idx(torch.cat(self._mp2cp_idx1))
@@ -126,7 +171,7 @@ class _BaseCollision(torch.autograd.Function):
     def forward(ctx, T1: torch.Tensor, T2: torch.Tensor, cfg: _BaseConfig, vis):
         cvx_lst, sph_lst, ts = cfg._cvx_lst, cfg._sph_lst, cfg._ts
         n_batch, n_mesh_pair = T2.shape[:2]  # b, p
-        margin = cfg.margin
+        margin = cfg._margin.view(1, n_mesh_pair)
         batched_pair_idx = cfg._cp2mp_idx.expand(n_batch, -1)  # (b, k)
 
         # Broad-phase filter
@@ -150,10 +195,8 @@ class _BaseCollision(torch.autograd.Function):
         )  # (b, p)
 
         # prune convex-piece-pairs if they belong to faraway mesh-pairs
-        near_mask = s2s_min_sct < margin  # (b, p)
-        near_cp_mask = near_mask.gather(1, batched_pair_idx)  # (b, k)
-        if torch.any(near_mask.sum(dim=-1) > cfg.per_env_max_contact_num):
-            logging.warning("Valid contact number exceeds per_env_max_contact_num")
+        broadphase_mask = s2s_min_sct < margin  # (b, p)
+        near_cp_mask = broadphase_mask.gather(1, batched_pair_idx)  # (b, k)
 
         # prune convex-piece-pair if min >= max_sct
         valid = s2s_min - s2s_max_sct.gather(1, batched_pair_idx)  # (b, k)
@@ -192,7 +235,10 @@ class _BaseCollision(torch.autograd.Function):
         dist, normal = ts.to(dist_out), ts.to(normal_out)
         wp1, wp2 = ts.to(wp1_out), ts.to(wp2_out)
         cvx_min_idx = ts.to_idx(min_idx_out)
+        near_mask = broadphase_mask & (dist < margin)
         cvx_min_idx[~near_mask] = 0
+        if torch.any(near_mask.sum(dim=-1) > cfg.per_env_max_contact_num):
+            logging.warning("Valid contact number exceeds per_env_max_contact_num")
         d_sign = 2 * (dist > 0) - 1
         if dist[near_mask].shape[0] and dist[near_mask].max() > 1:
             logging.warning(f"Distance {dist[near_mask].max()}")

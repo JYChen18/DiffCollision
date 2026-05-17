@@ -1,13 +1,44 @@
 import os
 import sys
 import logging
+from pathlib import Path
+
+import pytest
 import torch
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+SRC_DIR = ROOT_DIR / "src"
+sys.path.insert(0, str(SRC_DIR))
+sys.path.insert(0, str(ROOT_DIR))
+
 from diffcollision import DiffCollision, DCMesh
-
 from diffcollision.utils import torch_matrix_grad_to_se3, torch_se3_exp_map
-
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from examples.util.rotation import set_seed, sample_target_point
+
+
+@pytest.fixture(scope="module")
+def mesh_lst():
+    set_seed(1)
+    asset_dir = ROOT_DIR / "examples/assets/object/DGN_5k/processed_data"
+    assert asset_dir.exists(), (
+        f"{asset_dir} does not exist! Please download `DGN_5k` dataset following "
+        "the instruction in README.md"
+    )
+    obj_lst = sorted(os.listdir(asset_dir))
+    return [
+        DCMesh.from_file(asset_dir / obj_lst[i], scale=0.1, convex_hull=False)
+        for i in range(5)
+    ]
+
+
+@pytest.fixture(scope="module")
+def collision_pairs():
+    return torch.tensor([[0, 1], [3, 2], [1, 4]])
+
+
+@pytest.fixture(scope="module")
+def shuffle_lst():
+    return [2, 0, 1]
 
 
 def test_update_collision_pairs_forward(mesh_lst, collision_pairs, shuffle_lst):
@@ -93,7 +124,7 @@ def test_update_collision_pairs_backward(mesh_lst, collision_pairs, shuffle_lst)
 
 if __name__ == "__main__":
     set_seed(1)
-    asset_dir = "examples/assets/object/DGN_5k/processed_data"
+    asset_dir = ROOT_DIR / "examples/assets/object/DGN_5k/processed_data"
     assert os.path.exists(
         asset_dir
     ), f"{asset_dir} does not exist! Please download `DGN_5k` dataset following the instruction in README.md"
