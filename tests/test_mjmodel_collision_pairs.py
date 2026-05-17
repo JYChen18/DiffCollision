@@ -1,7 +1,6 @@
 import mujoco
 import torch
 from dataclasses import fields
-import dacite
 import pytest
 
 from diffcollision import (
@@ -13,10 +12,7 @@ from diffcollision import (
     RS1DirConfig,
     RS1DistConfig,
 )
-from diffcollision.mjmesh import (
-    get_mesh_pair_margins_from_mjmodel,
-    get_mesh_pairs_from_mjmodel,
-)
+from diffcollision.mjmesh import get_mesh_pair_margins_from_mjmodel
 
 
 def _model(xml: str) -> mujoco.MjModel:
@@ -42,6 +38,18 @@ def _body_pair_ids(model: mujoco.MjModel, name1: str, name2: str) -> tuple[int, 
             )
         )
     )
+
+
+def _mesh_pair_margins_from_mjmodel(
+    model: mujoco.MjModel,
+) -> dict[tuple[int, int], float]:
+    mesh_pairs, pair_margins = get_mesh_pair_margins_from_mjmodel(model)
+    return dict(zip(mesh_pairs, pair_margins))
+
+
+def _mesh_pairs_from_mjmodel(model: mujoco.MjModel) -> set[tuple[int, int]]:
+    mesh_pairs, _ = get_mesh_pair_margins_from_mjmodel(model)
+    return set(mesh_pairs)
 
 
 def _diffcollision_from_mjmodel(model: mujoco.MjModel) -> DiffCollision:
@@ -213,7 +221,7 @@ def test_explicit_geom_pair_uses_pair_margin():
         </mujoco>
         """)
 
-    pair_margins = get_mesh_pair_margins_from_mjmodel(model)
+    pair_margins = _mesh_pair_margins_from_mjmodel(model)
 
     assert pair_margins[_body_pair_ids(model, "a", "b")] == 0.04
 
@@ -234,9 +242,9 @@ def test_parent_child_body_pairs_are_filtered_by_default():
         </mujoco>
         """)
 
-    assert _body_pair_ids(
-        model, "parent", "child"
-    ) not in get_mesh_pairs_from_mjmodel(model)
+    assert _body_pair_ids(model, "parent", "child") not in _mesh_pairs_from_mjmodel(
+        model
+    )
 
 
 def test_parent_child_body_pairs_are_kept_when_filterparent_is_disabled():
@@ -258,9 +266,7 @@ def test_parent_child_body_pairs_are_kept_when_filterparent_is_disabled():
         </mujoco>
         """)
 
-    assert _body_pair_ids(model, "parent", "child") in get_mesh_pairs_from_mjmodel(
-        model
-    )
+    assert _body_pair_ids(model, "parent", "child") in _mesh_pairs_from_mjmodel(model)
 
 
 def test_same_weld_body_pairs_are_filtered():
@@ -279,9 +285,7 @@ def test_same_weld_body_pairs_are_filtered():
         </mujoco>
         """)
 
-    assert _body_pair_ids(model, "a", "b") not in get_mesh_pairs_from_mjmodel(
-        model
-    )
+    assert _body_pair_ids(model, "a", "b") not in _mesh_pairs_from_mjmodel(model)
 
 
 def test_incompatible_contact_masks_are_filtered():
@@ -300,9 +304,7 @@ def test_incompatible_contact_masks_are_filtered():
         </mujoco>
         """)
 
-    assert _body_pair_ids(model, "a", "b") not in get_mesh_pairs_from_mjmodel(
-        model
-    )
+    assert _body_pair_ids(model, "a", "b") not in _mesh_pairs_from_mjmodel(model)
 
 
 def test_explicit_geom_pair_bypasses_parent_and_mask_filters():
@@ -324,6 +326,4 @@ def test_explicit_geom_pair_bypasses_parent_and_mask_filters():
         </mujoco>
         """)
 
-    assert _body_pair_ids(model, "parent", "child") in get_mesh_pairs_from_mjmodel(
-        model
-    )
+    assert _body_pair_ids(model, "parent", "child") in _mesh_pairs_from_mjmodel(model)

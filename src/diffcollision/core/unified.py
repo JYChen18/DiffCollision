@@ -205,17 +205,9 @@ class DiffCollision:
 
         if mj_model is not None:
             ts = DCTensorSpec(device, dtype)
-            dcmesh_dict = get_mesh_from_mjmodel(mj_model, ts)
-            body_names = list(dcmesh_dict.keys())
-            mesh_ids = [
-                mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_BODY, name)
-                for name in body_names
-            ]
-            meshes = list(dcmesh_dict.values())
-
-            mesh_pair_margins = get_mesh_pair_margins_from_mjmodel(mj_model)
-            mesh_pairs = list(mesh_pair_margins.keys())
-            pair_margins = ts.to([mesh_pair_margins[pair] for pair in mesh_pairs])
+            mesh_ids, meshes = get_mesh_from_mjmodel(mj_model, ts)
+            mesh_pairs, pair_margins = get_mesh_pair_margins_from_mjmodel(mj_model)
+            pair_margins = ts.to(pair_margins)
 
         return cls(
             meshes=meshes,

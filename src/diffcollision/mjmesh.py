@@ -40,29 +40,30 @@ def get_mesh_from_mjmodel(model: mujoco.MjModel, ts: DCTensorSpec = DCTensorSpec
         T_geom[:3, 3] = model.geom_pos[idx]
         mesh.apply_transform(T_geom)
 
-        body_id = model.geom_bodyid[idx]
-        name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, body_id)
+        body_id = int(model.geom_bodyid[idx])
         contype = model.geom_contype[idx]
         conaffinity = model.geom_conaffinity[idx]
         is_visual = contype == 0 and conaffinity == 0
         if is_visual:
-            link_meshes_visual.setdefault(name, []).append(mesh)
+            link_meshes_visual.setdefault(body_id, []).append(mesh)
         else:
-            link_meshes_collision.setdefault(name, []).append(mesh)
+            link_meshes_collision.setdefault(body_id, []).append(mesh)
 
-    for name, meshes in link_meshes_visual.items():
-        link_meshes_visual[name] = trimesh.util.concatenate(meshes)
+    for body_id, meshes in link_meshes_visual.items():
+        link_meshes_visual[body_id] = trimesh.util.concatenate(meshes)
 
-    link_to_dcmesh = {}
-    for name in link_meshes_collision.keys():
-        fm_lst = link_meshes_collision[name]
-        if name in link_meshes_visual.keys():
-            cm = link_meshes_visual[name]
+    mesh_ids = []
+    meshes = []
+    for body_id in link_meshes_collision.keys():
+        fm_lst = link_meshes_collision[body_id]
+        if body_id in link_meshes_visual.keys():
+            cm = link_meshes_visual[body_id]
         else:
             cm = trimesh.util.concatenate(fm_lst)
-        link_to_dcmesh[name] = DCMesh.from_trimesh(cm, fm_lst, ts)
+        mesh_ids.append(int(body_id))
+        meshes.append(DCMesh.from_trimesh(cm, fm_lst, ts))
 
-    return link_to_dcmesh
+    return mesh_ids, meshes
 
 
 def get_exclude_pairs_from_mjmodel(model):
@@ -105,7 +106,7 @@ def _add_mesh_pair(
 
 
 def get_mesh_pair_margins_from_mjmodel(model):
-    """Return MuJoCo body-id mesh pairs and their contact margins.
+    """Return MuJoCo body-id mesh pairs and matching contact margins.
 
     DiffCollision stores one collision mesh per MuJoCo body, so this mirrors
     MuJoCo's geom-level contact filtering at body-pair granularity: a body pair
@@ -172,8 +173,6 @@ def get_mesh_pair_margins_from_mjmodel(model):
 
     for (body1, body2), margin in explicit_pair_margins.items():
         _add_mesh_pair(mesh_pair_margins, body1, body2, margin)
-    return mesh_pair_margins
-
-
-def get_mesh_pairs_from_mjmodel(model):
-    return set(get_mesh_pair_margins_from_mjmodel(model).keys())
+    mesh_pairs = list(mesh_pair_margins.keys())
+    pair_margins = [mesh_pair_margins[pair] for pair in mesh_pairs]
+    return mesh_pairs, pair_margins
