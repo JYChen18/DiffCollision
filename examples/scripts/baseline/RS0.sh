@@ -1,4 +1,4 @@
-uv run examples/main.py exp=base_RS0_DGN_cx 'convex=[True, True]' egt=False dcd.method=RS0 asset_dir=examples/assets/object/DGN_5k/processed_data n_tp=128
-uv run examples/main.py exp=base_RS0_objv_cx 'convex=[True, True]' egt=False dcd.method=RS0 asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128
-uv run examples/main.py exp=base_RS0_DGN_cc 'convex=[False, False]' egt=False dcd.method=RS0 asset_dir=examples/assets/object/DGN_5k/processed_data n_tp=128
-uv run examples/main.py exp=base_RS0_objv_cc 'convex=[False, False]' egt=False dcd.method=RS0 asset_dir=examples/assets/object/objaverse_5k/processed_data n_tp=128
+uv run examples/main.py --exp base_RS0_DGN_cx --convex True True --asset-dir examples/assets/object/DGN_5k/processed_data --n-tp 128 dcd:RS0 --dcd.no-egt
+uv run examples/main.py --exp base_RS0_objv_cx --convex True True --asset-dir examples/assets/object/objaverse_5k/processed_data --n-tp 128 dcd:RS0 --dcd.no-egt
+uv run examples/main.py --exp base_RS0_DGN_cc --convex False False --asset-dir examples/assets/object/DGN_5k/processed_data --n-tp 128 dcd:RS0 --dcd.no-egt
+uv run examples/main.py --exp base_RS0_objv_cc --convex False False --asset-dir examples/assets/object/objaverse_5k/processed_data --n-tp 128 dcd:RS0 --dcd.no-egt

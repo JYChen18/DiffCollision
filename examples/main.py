@@ -1,10 +1,9 @@
 import torch
 import numpy as np
-import hydra
-from omegaconf import OmegaConf
 import logging
 import os
 import traceback
+from dataclasses import replace
 
 from util.rotation import (
     set_seed,
@@ -20,6 +19,7 @@ from diffcollision.utils import (
     torch_matrix_grad_to_se3,
 )
 from diffcollision import DiffCollision, DCMesh
+from example_config import MainConfig
 
 
 def rand_problem(cfg):
@@ -90,9 +90,13 @@ def single_problem(prob_id, cfg):
         mesh1, mesh2, cfg.n_tp, tp_type, cfg.tp_check, ts
     )  # b, 1, 3
 
-    # Setup configurations
-    dcd_cfg = OmegaConf.to_container(cfg.dcd, resolve=True)
-    diffcoll = DiffCollision([mesh1, mesh2], tp1_o=tp1_o, tp2_o=tp2_o, **dcd_cfg)
+    diffcoll = DiffCollision(
+        [mesh1, mesh2],
+        config=replace(cfg.dcd, enable_debug=cfg.vis),
+        margin=cfg.margin,
+        tp1_o=tp1_o,
+        tp2_o=tp2_o,
+    )
 
     # Initialize object poses
     t1 = ts.to([[0, 0, 0]]).expand(b, 3)
@@ -185,8 +189,7 @@ def single_problem(prob_id, cfg):
     return final_loss
 
 
-@hydra.main(config_path="config", config_name="base", version_base=None)
-def main(cfg):
+def main(cfg: MainConfig):
     try:
         set_seed(cfg.seed)
         total_loss = []
@@ -205,4 +208,4 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    main()
+    main(MainConfig.from_yaml("examples/config/base.yaml").cli())

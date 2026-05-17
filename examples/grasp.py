@@ -3,13 +3,13 @@ import trimesh
 import os
 import mujoco
 import logging
+from dataclasses import replace
 
-import hydra
-from omegaconf import OmegaConf
 import torch
 import pytorch_kinematics as pk
 from diffcollision.utils import DCTensorSpec
 from diffcollision import DCMesh, DiffCollision
+from example_config import MainConfig
 
 from util.vis import vis_usd
 from util.rotation import set_seed, torch_normalize_vector, torch_quaternion_to_matrix
@@ -98,8 +98,7 @@ def load_scene_cfg(scene_path: str) -> dict:
     return scene_cfg
 
 
-@hydra.main(config_path="config", config_name="base", version_base=None)
-def main(cfg):
+def main(cfg: MainConfig):
     set_seed(cfg.seed)
     ts = DCTensorSpec(cfg.device, cfg.dtype)
 
@@ -141,13 +140,19 @@ def main(cfg):
     mesh_lst.append(DCMesh.from_file(obj_path, obj_scale[0], False, ts))
 
     obj_id = -1
+    mesh_ids = list(range(len(hand_body_name))) + [obj_id]
     collision_pairs = []
     for name in fingertip_name:
         collision_pairs.append((obj_id, hand_body_name.index(name)))
 
-    dcd_cfg = OmegaConf.to_container(cfg.dcd, resolve=True)
     diffcoll = DiffCollision(
-        mesh_lst, collision_pairs, tp1_o=tp1_o, tp2_o=tp2_o, **dcd_cfg
+        mesh_lst,
+        collision_pairs=collision_pairs,
+        mesh_ids=mesh_ids,
+        config=replace(cfg.dcd, enable_debug=cfg.vis),
+        margin=cfg.margin,
+        tp1_o=tp1_o,
+        tp2_o=tp2_o,
     )
 
     T_obj = ts.to(torch.eye(4)[None])
@@ -230,4 +235,4 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    main()
+    main(MainConfig.from_yaml("examples/config/base.yaml").cli())

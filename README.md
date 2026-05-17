@@ -25,7 +25,7 @@ meshes = [DCMesh.from_file(f"obj{i}.obj", scale=0.1) for i in range(7)]
 collision_pairs = [[0, 1], [0, 3], [3, 2], [1, 6], [6, 5]]  # total 5 mesh pairs
 
 # Initialize differentiable collision module
-diffcoll = DiffCollision(meshes, collision_pairs, method="RS1Dist")
+diffcoll = DiffCollision(meshes, collision_pairs)
 
 # Batched transformation matrices for each mesh, shape (batch, n_mesh, 4, 4)
 transforms = torch.eye(4, requires_grad=True)[None, None].expand(13, 7, 4, 4)

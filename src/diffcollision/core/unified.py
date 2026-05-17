@@ -1,6 +1,9 @@
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
+from typing import Annotated, Union
 import torch
 import mujoco
+import tyro
+import dacite
 
 from diffcollision.utils import eqv_grad, torch_normalize_vector, DCTensorSpec
 from diffcollision.core.rs1dist import RS1DistCollision, RS1DistConfig
@@ -13,24 +16,28 @@ from diffcollision.mjmesh import (
     get_mesh_from_mjmodel,
     get_collision_pair_margins_from_mjmodel,
 )
-from diffcollision.core.base import _BaseConfig as DCBaseConfig
-from diffcollision.core.base import _BaseCollision as DCBaseCollision
+from diffcollision.core.base import DCContext
 
-DIFFCOLL_CONFIG_REGISTRY: dict[str, type[DCBaseConfig]] = {
-    "RS1Dist": RS1DistConfig,
-    "RS1Dir": RS1DirConfig,
-    "RS0": RS0Config,
-    "FD": FDConfig,
-    "Analytical": AnalyticalConfig,
-}
+DiffCollisionConfig = Union[
+    Annotated[RS1DistConfig, tyro.conf.subcommand(name="RS1Dist")],
+    Annotated[RS1DirConfig, tyro.conf.subcommand(name="RS1Dir")],
+    Annotated[RS0Config, tyro.conf.subcommand(name="RS0")],
+    Annotated[FDConfig, tyro.conf.subcommand(name="FD")],
+    Annotated[AnalyticalConfig, tyro.conf.subcommand(name="Analytical")],
+]
 
-DIFFCOLL_FUNC_REGISTRY: dict[str, type[DCBaseCollision]] = {
-    "RS1Dist": RS1DistCollision,
-    "RS1Dir": RS1DirCollision,
-    "RS0": RS0Collision,
-    "FD": FDCollision,
-    "Analytical": AnalyticalCollision,
-}
+
+@dataclass
+class _DCConfigWrapper:
+    config: DiffCollisionConfig
+
+
+def build_diffcoll_config(config_dict: dict) -> DiffCollisionConfig:
+    return dacite.from_dict(
+        _DCConfigWrapper,
+        {"config": config_dict},
+        config=dacite.Config(strict=True, strict_unions_match=True),
+    ).config
 
 
 @dataclass
@@ -130,7 +137,9 @@ class DiffCollision:
 
     Example
     -------
-    >>> diffcoll = DiffCollision(meshes, collision_pairs=[[0, 1]])
+    >>> diffcoll = DiffCollision(
+    ...     meshes, collision_pairs=[[0, 1]], config=RS1DistConfig()
+    ... )
     >>> result = diffcoll.forward(transforms)
     >>> wp1, wp2 = result.wp1, result.wp2   # witness points on each collision pair (in world frame)
     >>> n, sdf = result.normal, result.sdf  # contact normal & signed distance (in world frame)
@@ -140,87 +149,82 @@ class DiffCollision:
 
     def __init__(
         self,
-        meshes: list[DCMesh] = None,
+        meshes: list[DCMesh],
         collision_pairs: list[tuple[int, int]] | torch.Tensor = None,
         mesh_ids: list[int] | torch.Tensor = None,
-        method: str = "RS1Dist",
-        enable_debug: bool = False,
-        **kwargs,
+        margin: float | list | torch.Tensor = 10.0,
+        tp1_o: torch.Tensor | None = None,
+        tp2_o: torch.Tensor | None = None,
+        config: DiffCollisionConfig = RS1DirConfig(),
     ):
         """
         Initialize the differentiable collision module.
 
         Parameters
         ----------
-        meshes : list of DCMesh
-            All meshes in the scene.
+        meshes : list[DCMesh], optional
+            Meshes to evaluate. May be omitted when `mj_model` is supplied.
         collision_pairs : list of tuple(int, int) or torch.Tensor, optional
-            Pairs of mesh ids to check for collisions. If None, all unique
-            unordered pairs from `mesh_ids` will be generated automatically.
-            Default: None.
-        mesh_ids : list of int or torch.Tensor, optional
-            External ids for the meshes. These ids are used in public
-            collision_pairs and returned cpidx values. If None, compact mesh-list
-            indices are used.
-        method : str, optional
-            Algorithm used for differentiable collision computation.
-            Default: `"RS1Dist"`.
-        enable_debug : bool, optional
-            If True, intermediate results are stored for visualization and
-            can be accessed via :meth:`get_debug_dict()`. Default: False.
-        **kwargs :
-            Additional configuration parameters for the selected method.
-            To view available parameters, see the corresponding config class,
-            e.g. `help(RS1DistConfig)`.
+            Mesh id pairs to evaluate. Defaults to all unique pairs, or to
+            MuJoCo-compatible pairs when `mj_model` is supplied.
+        mesh_ids : list[int] or torch.Tensor, optional
+            Public ids for `meshes`. Defaults to compact indices, or to MuJoCo
+            body ids when `mj_model` is supplied.
+        config : DiffCollisionConfig, optional
+            Collision method config. Defaults to `RS1DirConfig()`.
+        margin : float, list, or torch.Tensor, optional
+            Broad-phase pruning margin. May be a scalar or one value per collision pair.
+        tp1_o, tp2_o : torch.Tensor, optional
+            Target points in object-local frame, with shape `(batch, n_pair, 3)`.
+            Required when using adaptive sampling.
         """
-        config_cls = DIFFCOLL_CONFIG_REGISTRY[method]
-        func_cls = DIFFCOLL_FUNC_REGISTRY[method]
+        if not hasattr(config, "method"):
+            raise TypeError("config should be a DiffCollisionConfig instance")
+        self.cfg = config
 
-        # Filter only valid arguments for the selected configuration
-        valid_fields = {
-            f.name for f in fields(config_cls) if not f.name.startswith("_")
-        }
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_fields}
-
-        self.cfg = config_cls(
-            _meshes=meshes,
-            _mesh_pair_ids=collision_pairs,
-            _mesh_ids=mesh_ids,
-            **filtered_kwargs,
+        self.ctx = DCContext.from_meshes(
+            meshes,
+            collision_pairs,
+            mesh_ids,
+            margin,
+            tp1_o,
+            tp2_o,
         )
 
-        self.func_cls = func_cls
-        self.debug_dict = DCDebugDict(meshes=meshes) if enable_debug else None
+        self.func_cls = config.method
+        self.debug_dict = DCDebugDict(meshes=meshes) if self.cfg.enable_debug else None
 
-    @staticmethod
-    def build_from_mjmodel(
+    @classmethod
+    def from_mjmodel(
+        cls,
         mj_model: mujoco.MjModel,
-        method: str = "RS1Dist",
-        enable_debug: bool = False,
-        **kwargs,
-    ):
-        ts_kwargs = {
-            key: kwargs.pop(key)
-            for key in ("device", "dtype")
-            if key in kwargs
-        }
-        ts = DCTensorSpec(**ts_kwargs)
-        if "tp1_o" in kwargs and kwargs["tp1_o"] is not None:
-            ts = DCTensorSpec(kwargs["tp1_o"].device, kwargs["tp1_o"].dtype)
-        dcmesh_dict = get_mesh_from_mjmodel(mj_model, ts)
-        body_names = list(dcmesh_dict.keys())
-        mesh_ids = [
-            mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_BODY, name)
-            for name in body_names
-        ]
-        meshes = list(dcmesh_dict.values())
-        collision_pair_margins = get_collision_pair_margins_from_mjmodel(mj_model)
-        collision_pairs = list(collision_pair_margins.keys())
-        kwargs["margin"] = ts.to(
-            [collision_pair_margins[pair] for pair in collision_pairs]
-        )
-        return DiffCollision(
-            meshes, collision_pairs, mesh_ids, method, enable_debug, **kwargs
+        config: DiffCollisionConfig = RS1DirConfig(),
+        device: str = "cpu",
+        dtype: str = "float",
+    ) -> "DiffCollision":
+
+        if mj_model is not None:
+            ts = DCTensorSpec(device, dtype)
+            dcmesh_dict = get_mesh_from_mjmodel(mj_model, ts)
+            body_names = list(dcmesh_dict.keys())
+            mesh_ids = [
+                mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_BODY, name)
+                for name in body_names
+            ]
+            meshes = list(dcmesh_dict.values())
+
+            collision_pair_margins = get_collision_pair_margins_from_mjmodel(mj_model)
+            collision_pairs = list(collision_pair_margins.keys())
+            pair_margins = ts.to(
+                [collision_pair_margins[pair] for pair in collision_pairs]
+            )
+
+        return cls(
+            meshes=meshes,
+            collision_pairs=collision_pairs,
+            mesh_ids=mesh_ids,
+            margin=pair_margins,
+            config=config,
         )
 
     def forward(
@@ -250,8 +254,15 @@ class DiffCollision:
             A structured container of world-frame and (optionally) object local-frame results.
         """
         self.assert_valid_transforms(transforms)
-        T1 = transforms[:, self.cfg._ml2mp_idx1]
-        T2 = transforms[:, self.cfg._ml2mp_idx2]
+        if (
+            self.ctx.tp1_o is not None
+            and self.ctx.tp1_o.shape[0] != transforms.shape[0]
+        ):
+            raise ValueError(
+                "tp1_o and tp2_o batch dimension should match the transforms batch size"
+            )
+        T1 = transforms[:, self.ctx.ml2mp_idx1]
+        T2 = transforms[:, self.ctx.ml2mp_idx2]
 
         if not self.cfg.egt:
             T1_egt, T2_egt = T1, T2
@@ -261,7 +272,11 @@ class DiffCollision:
             )
 
         wp1_all, wp2_all, normal_all, d_sign, near_mask = self.func_cls.apply(
-            T1_egt, T2_egt, self.cfg, self.debug_dict if not skip_debug else None
+            T1_egt,
+            T2_egt,
+            self.cfg,
+            self.ctx,
+            self.debug_dict if not skip_debug else None,
         )
 
         if self.debug_dict is not None and not skip_debug:
@@ -269,13 +284,13 @@ class DiffCollision:
                 self.debug_dict.transforms.append(transforms.detach().cpu())
                 self.debug_dict.wp1.append(wp1_all.detach().cpu())
                 self.debug_dict.wp2.append(wp2_all.detach().cpu())
-                if self.cfg.tp1_o is not None and self.cfg.tp2_o is not None:
+                if self.ctx.tp1_o is not None and self.ctx.tp2_o is not None:
                     tp1 = (
-                        torch.einsum("bkij,bkj->bki", T1[..., :3, :3], self.cfg.tp1_o)
+                        torch.einsum("bkij,bkj->bki", T1[..., :3, :3], self.ctx.tp1_o)
                         + T1[..., :3, 3]
                     )
                     tp2 = (
-                        torch.einsum("bkij,bkj->bki", T2[..., :3, :3], self.cfg.tp2_o)
+                        torch.einsum("bkij,bkj->bki", T2[..., :3, :3], self.ctx.tp2_o)
                         + T2[..., :3, 3]
                     )
                     self.debug_dict.tp1.append(tp1.detach().cpu())
@@ -320,7 +335,7 @@ class DiffCollision:
         wp2[batch_ids, slot_ids] = wp2_all[batch_ids, pair_ids]
         normal[batch_ids, slot_ids] = normal_all[batch_ids, pair_ids]
         sdf[batch_ids, slot_ids] = sdf_all[batch_ids, pair_ids]
-        cpidx[batch_ids, slot_ids] = self.cfg._mesh_pair_ids[pair_ids]
+        cpidx[batch_ids, slot_ids] = self.ctx.mesh_pair_ids[pair_ids]
 
         if return_local:
             wp1_o = ts.to(torch.zeros(n_batch, self.cfg.per_env_max_contact_num, 3))
@@ -335,30 +350,6 @@ class DiffCollision:
             wp1_o = wp2_o = n1_o = n2_o = None
 
         return DCResult(wp1, wp2, normal, sdf, cpidx, wp1_o, wp2_o, n1_o, n2_o)
-
-    def update_collision_pairs(
-        self,
-        collision_pairs: list[tuple[int, int]] | torch.Tensor,
-        tp1_o: torch.Tensor = None,
-        tp2_o: torch.Tensor = None,
-        margin: float | list | torch.Tensor = None,
-    ):
-        """
-        Dynamically update the set of mesh pairs to be checked for collisions.
-
-        Parameters
-        ----------
-        collision_pairs : list of tuple(int, int) or torch.Tensor
-            New set of mesh id pairs to evaluate.
-        tp1_o, tp2_o : torch.Tensor, optional
-            Target points in the object local frame of each collision pair.
-            Required when `method` is `"RS1Dist"` or `"RS1Dir"` and `sample="adp"`. Default: None.
-        margin : float, list, or torch.Tensor, optional
-            Contact detection margin. May be scalar or one value per collision
-            pair. If omitted, the existing margin tensor is reused.
-        """
-        self.cfg.update_collision_pairs(collision_pairs, tp1_o, tp2_o, margin)
-        return
 
     def get_debug_dict(self) -> DCDebugDict:
         """
@@ -375,19 +366,30 @@ class DiffCollision:
             )
         return self.debug_dict
 
-    def get_cfg(self) -> DCBaseConfig:
+    def get_cfg(self) -> DiffCollisionConfig:
         """
         Retrieve the configuration object of the selected method.
 
         Returns
         -------
-        DCBaseConfig
+        DiffCollisionConfig
             Configuration instance (e.g., `RS1DistConfig`, `FDConfig`, etc.).
         """
         return self.cfg
 
+    def get_context(self) -> DCContext:
+        """
+        Retrieve the internal runtime context.
+
+        Returns
+        -------
+        DCContext
+            Meshes, tensor specs, pair mappings, broad-phase indices, and caches.
+        """
+        return self.ctx
+
     def assert_valid_transforms(self, transforms):
-        ts: DCTensorSpec = self.cfg._ts
+        ts: DCTensorSpec = self.ctx.ts
         # type check
         assert (
             isinstance(transforms, torch.Tensor)
@@ -404,8 +406,8 @@ class DiffCollision:
         assert (
             transforms.ndim == 4
             and transforms.shape[-2:] == (4, 4)
-            and transforms.shape[1] == len(self.cfg._meshes)
-        ), f"transforms have the wrong shape. Got {transforms.shape}, expected (b, {len(self.cfg._meshes)}, 4, 4)."
+            and transforms.shape[1] == len(self.ctx.meshes)
+        ), f"transforms have the wrong shape. Got {transforms.shape}, expected (b, {len(self.ctx.meshes)}, 4, 4)."
 
         # bottom row check
         bottom = transforms[..., 3, :]

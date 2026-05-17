@@ -1,8 +1,10 @@
 from .core import (
     DiffCollision,
+    DiffCollisionConfig,
+    build_diffcoll_config,
     DCResult,
     DCDebugDict,
-    DCBaseConfig,
+    DCContext,
     RS1DistConfig,
     RS1DirConfig,
     RS0Config,
@@ -14,11 +16,13 @@ from .utils import DCTensorSpec
 
 __all__ = [
     "DiffCollision",
+    "DiffCollisionConfig",
+    "build_diffcoll_config",
     "DCResult",
     "DCMesh",
     "DCDebugDict",
     "DCTensorSpec",
-    "DCBaseConfig",
+    "DCContext",
     "RS1DistConfig",
     "RS1DirConfig",
     "RS0Config",

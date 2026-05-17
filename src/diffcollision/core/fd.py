@@ -1,13 +1,14 @@
 from dataclasses import dataclass
+from typing import Literal
 import torch
 import numpy as np
 
 from diffcollision.cpp._coal_openmp import batched_coal_distance
-from diffcollision.core.base import _BaseCollision, _BaseConfig
+from diffcollision.core.base import _BaseCollision, BaseCollisionConfig, DCContext
 
 
 @dataclass
-class FDConfig(_BaseConfig):
+class FDConfig(BaseCollisionConfig):
     """
     Configuration for `method="FD"` in `DiffCollision`.
 
@@ -21,20 +22,19 @@ class FDConfig(_BaseConfig):
         The step size for the rotation in EGT. Default: 1.0.
     egt_step_t : float, optional
         The step size for the translation in EGT. The relative step between r and t matters. Default: 0.001.
-    tp1_o : torch.Tensor, optional
-        Target points in the **object local frame** on the first mesh of each collision pair.
-        Used only for debugging and visualization. Default: None.
-    tp2_o : torch.Tensor, optional
-        Target points in the **object local frame** on the first mesh of each collision pair.
-        Used only for debugging and visualization. Default: None.
     eps_r : float, optional
         Magnitude of rotation perturbation for finite difference estimation. Default: 0.1.
     eps_t : float, optional
         Magnitude of translation perturbation for finite difference estimation. Default: 0.01.
     """
 
+    type: Literal["FD"] = "FD"
     eps_r: float = 0.1
     eps_t: float = 0.01
+
+    @property
+    def method(self):
+        return FDCollision
 
 
 class FDCollision(_BaseCollision):
@@ -45,8 +45,9 @@ class FDCollision(_BaseCollision):
         )
         T1, T2, _, _, _, _ = ctx.saved_tensors  # batched
         cfg: FDConfig = ctx.cfg
-        eps_r, eps_t, ts = cfg.eps_r, cfg.eps_t, cfg._ts
-        cvx_lst, sph_lst = cfg._cvx_lst, cfg._sph_lst
+        dc_ctx: DCContext = ctx.dc_ctx
+        eps_r, eps_t, ts = cfg.eps_r, cfg.eps_t, dc_ctx.ts
+        cvx_lst, sph_lst = dc_ctx.cvx_lst, dc_ctx.sph_lst
 
         n_batch, n_mesh_pair = T1.shape[:2]
         n_jitter = 48  # n_jitter is fixed for FD
@@ -69,12 +70,14 @@ class FDCollision(_BaseCollision):
 
         # Broad-phase filter based on bounding spheres
         # NOTE: The current bounding sphere test may be wrong for concave objects in severe penetration
-        sph1_o, sph2_o = sph_lst[cfg._cl2cp_idx1], sph_lst[cfg._cl2cp_idx2]  # k, 4
-        s2s_max, s2s_min = cfg._warp_sphere_dist.forward(
-            T1_new, T2_new, sph1_o, sph2_o, cfg._mp2cp_idx1, cfg._mp2cp_idx2
+        sph1_o, sph2_o = sph_lst[dc_ctx.cl2cp_idx1], sph_lst[dc_ctx.cl2cp_idx2]  # k, 4
+        s2s_max, s2s_min = dc_ctx.warp_sphere_dist.forward(
+            T1_new, T2_new, sph1_o, sph2_o, dc_ctx.mp2cp_idx1, dc_ctx.mp2cp_idx2
         )
-        batched_pair_idx = cfg._cp2mp_idx[None, None].expand_as(s2s_max)  # b, j, k
-        s2s_max_sct = ts.to(torch.zeros((n_batch, n_jitter, cfg._cp2mp_idx.max() + 1)))
+        batched_pair_idx = dc_ctx.cp2mp_idx[None, None].expand_as(s2s_max)  # b, j, k
+        s2s_max_sct = ts.to(
+            torch.zeros((n_batch, n_jitter, dc_ctx.cp2mp_idx.max() + 1))
+        )
         s2s_max_sct.scatter_reduce_(
             2, batched_pair_idx, s2s_max, "amin", include_self=False
         )  # b, j, p
@@ -91,11 +94,11 @@ class FDCollision(_BaseCollision):
         min_idx_out = np.zeros((n_batch, n_jitter, n_mesh_pair), dtype=np.uintp)
         batched_coal_distance(
             cvx_lst,
-            cfg._cl2cp_idx1.cpu().numpy().reshape(-1),
+            dc_ctx.cl2cp_idx1.cpu().numpy().reshape(-1),
             T1_new.cpu().numpy().reshape(-1),
-            cfg._cl2cp_idx2.cpu().numpy().reshape(-1),
+            dc_ctx.cl2cp_idx2.cpu().numpy().reshape(-1),
             T2_new.cpu().numpy().reshape(-1),
-            cfg._cp2mp_idx.cpu().numpy().reshape(-1),
+            dc_ctx.cp2mp_idx.cpu().numpy().reshape(-1),
             valid_idx,
             n_batch * n_jitter,
             n_cvx_pair,
@@ -130,4 +133,4 @@ class FDCollision(_BaseCollision):
             "bpxyz, bpx -> bpyz", J_wp2_T2, grad_wp2
         )
 
-        return grad1, grad2, None, None
+        return grad1, grad2, None, None, None

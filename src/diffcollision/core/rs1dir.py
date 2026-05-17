@@ -1,7 +1,8 @@
 from dataclasses import dataclass
+from typing import Literal
 import torch
 
-from diffcollision.core.base import _BaseCollision
+from diffcollision.core.base import _BaseCollision, DCContext
 from diffcollision.core.rs1dist import _local_sample, RS1DistConfig
 
 
@@ -26,12 +27,6 @@ class RS1DirConfig(RS1DistConfig):
         - "fix": Fixed sampling around witness points.
         - "nbr": Neighbor-based sampling on the mesh surface.
         Default: "fix".
-    tp1_o : torch.Tensor, optional
-        Target points in the **object local frame** on the first mesh of each collision pair.
-        Required if `sample` is "adp", otherwise used only for debugging. Default: None.
-    tp2_o : torch.Tensor, optional
-        Target points in the **object local frame** on the first mesh of each collision pair.
-        Required if `sample` is "adp", otherwise used only for debugging. Default: None.
     n_global : int, optional
         Number of global samples. Required if `sample` is "adp" or "fix". Default: 1024.
     n_local : int, optional
@@ -48,7 +43,12 @@ class RS1DirConfig(RS1DistConfig):
         Softmax temperature for differentiable witness point computation. Default: 1e-3.
     """
 
+    type: Literal["RS1Dir"] = "RS1Dir"
     eps: float = 1e-3
+
+    @property
+    def method(self):
+        return RS1DirCollision
 
 
 class RS1DirCollision(_BaseCollision):
@@ -65,9 +65,12 @@ class RS1DirCollision(_BaseCollision):
         d_sign = (dist > 0).int() * 2 - 1
         y = d_sign.unsqueeze(1) * (wp1 - wp2)
         cfg: RS1DirConfig = ctx.cfg
+        dc_ctx: DCContext = ctx.dc_ctx
 
         with torch.no_grad():
-            ls1_o, ls2_o = _local_sample(cfg, T1, T2, wp1, wp2, normal, b)
+            ls1_o, ls2_o = _local_sample(
+                cfg, dc_ctx, T1, T2, wp1, wp2, normal, b, ctx.cvx_min_idx
+            )
             ls1_o, ls2_o = ls1_o[..., :3], ls2_o[..., :3]
             if ctx.vis is not None:
                 ls1 = ls1_o @ T1[:, :3, :3].transpose(-1, -2) + T1[:, None, :3, 3]
@@ -117,4 +120,4 @@ class RS1DirCollision(_BaseCollision):
         grad2 = torch.einsum(
             "bpijk, bpi -> bpjk", J_wp2_T2.view(b, p, 3, 4, 4), grad_wp2
         ) + torch.einsum("bpijk, bpi -> bpjk", J_wp1_T2.view(b, p, 3, 4, 4), grad_wp1)
-        return grad1, grad2, None, None
+        return grad1, grad2, None, None, None

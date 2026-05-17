@@ -12,7 +12,16 @@ SRC_DIR = ROOT_DIR / "src"
 sys.path.insert(0, str(SRC_DIR))
 sys.path.insert(0, str(ROOT_DIR))
 
-from diffcollision import DCMesh, DiffCollision, DCTensorSpec
+from diffcollision import (
+    DCMesh,
+    DiffCollision,
+    DCTensorSpec,
+    AnalyticalConfig,
+    FDConfig,
+    RS0Config,
+    RS1DirConfig,
+    RS1DistConfig,
+)
 from diffcollision.utils import torch_matrix_grad_to_se3, torch_se3_exp_map
 from examples.util.rotation import set_seed
 
@@ -40,7 +49,64 @@ def test_forward(mesh_lst, ts):
     logging.info("Pass forward test")
 
 
+def test_init_scalar_margin_expands_into_context(mesh_lst, ts):
+    diffcoll = DiffCollision(
+        mesh_lst,
+        config=RS1DistConfig(per_env_max_contact_num=3),
+        margin=0.5,
+    )
+
+    assert diffcoll.cfg.per_env_max_contact_num == 3
+    assert diffcoll.ctx.margin.shape == (1,)
+    assert torch.allclose(diffcoll.ctx.margin, ts.to([0.5]))
+
+
+def test_init_pair_margin_stays_pair_aligned(mesh_lst, ts):
+    diffcoll = DiffCollision(
+        [mesh_lst[0], mesh_lst[1], mesh_lst[0]],
+        collision_pairs=[[0, 1], [1, 2]],
+        margin=ts.to([0.2, 0.3]),
+    )
+
+    assert diffcoll.ctx.margin.shape == (2,)
+    assert torch.allclose(diffcoll.ctx.margin, ts.to([0.2, 0.3]))
+
+
+def test_target_points_validate_pair_shape(mesh_lst, ts):
+    tp1_o = ts.to([[[0, 0.1, 0], [0.1, 0, 0]]])
+    tp2_o = ts.to([[[0.1, 0, 0], [0, 0.1, 0]]])
+
+    with pytest.raises(ValueError, match="shape"):
+        DiffCollision(mesh_lst, tp1_o=tp1_o, tp2_o=tp2_o)
+
+
+def test_adaptive_sampling_requires_target_points(mesh_lst, ts):
+    T = ts.to(torch.eye(4)[None, None].repeat(1, 2, 1, 1))
+    T[:, 1, 0, 3] = 0.5
+    T.requires_grad_()
+    diffcoll = DiffCollision(mesh_lst, config=RS1DistConfig(sample="adp"))
+
+    res = diffcoll.forward(T, return_local=False)
+    with pytest.raises(ValueError, match="target points"):
+        res.wp1.sum().backward()
+
+
+def test_nested_collision_config_dispatches_all_methods(mesh_lst):
+    configs = [
+        RS1DistConfig(),
+        RS1DirConfig(),
+        RS0Config(n_jitter=4),
+        FDConfig(),
+        AnalyticalConfig(),
+    ]
+
+    for collision_cfg in configs:
+        diffcoll = DiffCollision(mesh_lst, config=collision_cfg)
+        assert diffcoll.get_cfg().type == collision_cfg.type
+
+
 def test_backward_easy(mesh_lst, ts):
+    set_seed(1)
     T1 = torch.eye(4)[None]
     T2 = torch.eye(4)[None]
     T2[:, 0, 3] = 0.5
@@ -50,7 +116,10 @@ def test_backward_easy(mesh_lst, ts):
     step_r = 1.0
     step_t = 0.1
 
-    diffcoll = DiffCollision(mesh_lst, egt_step_r=step_r, egt_step_t=step_t)
+    diffcoll = DiffCollision(
+        mesh_lst,
+        config=RS1DistConfig(egt_step_r=step_r, egt_step_t=step_t),
+    )
 
     for i in range(51):
         with torch.no_grad():
@@ -69,6 +138,7 @@ def test_backward_easy(mesh_lst, ts):
 
 
 def test_backward_hard(mesh_lst, ts):
+    set_seed(1)
     T1 = torch.eye(4)[None]
     T2 = torch.eye(4)[None]
     T2[:, 0, 3] = 0.5
@@ -80,7 +150,12 @@ def test_backward_hard(mesh_lst, ts):
     step_r = 10.0
     step_t = 0.1
     diffcoll = DiffCollision(
-        mesh_lst, egt_step_r=step_r, egt_step_t=step_t, enable_debug=True
+        mesh_lst,
+        config=RS1DistConfig(
+            enable_debug=True, egt_step_r=step_r, egt_step_t=step_t
+        ),
+        tp1_o=tp1_o,
+        tp2_o=tp2_o,
     )
 
     for i in range(101):

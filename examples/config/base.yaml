@@ -4,7 +4,7 @@ dtype: double
 n_thread: 16  # for CPU-based Coal library
 
 exp: debug
-log_dir: output/${exp}
+log_dir: output/debug
 asset_dir: examples/assets/object/DGN_5k/processed_data
 n_prob: 100
 prob_rand: 
@@ -31,22 +31,15 @@ step_r: 10.0
 step_t: 0.01
 iter: 2000
 upd1: False
-egt: True
 margin: 0.001
 
 dcd:
-  method: RS1Dist
-  sample: "adp"
-  enable_debug: ${vis}
-  egt: ${egt}
-  egt_step_r: ${step_r}
-  egt_step_t: ${step_t}
-  n_thread: ${n_thread}
+  type: RS1Dist
+  sample: adp
+  egt: True
+  egt_step_r: 10.0
+  egt_step_t: 0.01
+  n_thread: 16
 
 vis: False
 vis_sample: False
-
-
-hydra:
-  run:
-    dir: ${log_dir}

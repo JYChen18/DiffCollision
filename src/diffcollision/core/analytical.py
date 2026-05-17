@@ -1,12 +1,13 @@
 from dataclasses import dataclass
+from typing import Literal
 import torch
 
-from diffcollision.core.base import _BaseConfig, _BaseCollision
+from diffcollision.core.base import BaseCollisionConfig, _BaseCollision, DCContext
 from diffcollision.utils import point_to_triangle_distance_and_closest
 
 
 @dataclass
-class AnalyticalConfig(_BaseConfig):
+class AnalyticalConfig(BaseCollisionConfig):
     """
     Configuration for `method="Analytical"` in `DiffCollision`.
 
@@ -20,15 +21,13 @@ class AnalyticalConfig(_BaseConfig):
         The step size for the rotation in EGT. Default: 1.0.
     egt_step_t : float, optional
         The step size for the translation in EGT. The relative step between r and t matters. Default: 0.001.
-    tp1_o : torch.Tensor, optional
-        Target points in the **object local frame** on the first mesh of each collision pair.
-        Used only for debugging and visualization. Default: None.
-    tp2_o : torch.Tensor, optional
-        Target points in the **object local frame** on the first mesh of each collision pair.
-        Used only for debugging and visualization. Default: None.
     """
 
-    pass
+    type: Literal["Analytical"] = "Analytical"
+
+    @property
+    def method(self):
+        return AnalyticalCollision
 
 
 class AnalyticalCollision(_BaseCollision):
@@ -40,14 +39,15 @@ class AnalyticalCollision(_BaseCollision):
         T1, T2, _, _, wp1, wp2 = ctx.saved_tensors
         b, p = T1.shape[:2]
         cfg: AnalyticalConfig = ctx.cfg
-        meshes, ts = cfg._meshes, cfg._ts
+        dc_ctx: DCContext = ctx.dc_ctx
+        meshes, ts = dc_ctx.meshes, dc_ctx.ts
 
         wp1_o = torch.einsum("bpji,bpj->bpi", T1[:, :, :3, :3], wp1 - T1[:, :, :3, 3])
         wp2_o = torch.einsum("bpji,bpj->bpi", T2[:, :, :3, :3], wp2 - T2[:, :, :3, 3])
         p1_o, p2_o = [], []
         for i in range(p):
-            cm1 = meshes[cfg._ml2mp_idx1[i]].coarse_mesh
-            cm2 = meshes[cfg._ml2mp_idx2[i]].coarse_mesh
+            cm1 = meshes[int(dc_ctx.ml2mp_idx1[i])].coarse_mesh
+            cm2 = meshes[int(dc_ctx.ml2mp_idx2[i])].coarse_mesh
             _, _, f1 = cm1.nearest.on_surface(wp1_o[:, i].cpu().numpy())
             _, _, f2 = cm2.nearest.on_surface(wp2_o[:, i].cpu().numpy())
             p1_o.append(
@@ -82,4 +82,4 @@ class AnalyticalCollision(_BaseCollision):
         grad2 = torch.einsum(
             "bpijk, bpi -> bpjk", J_wp2_T2.view(b, p, 3, 4, 4), grad_wp2
         ) + torch.einsum("bpijk, bpi -> bpjk", J_wp1_T2.view(b, p, 3, 4, 4), grad_wp1)
-        return grad1, grad2, None, None
+        return grad1, grad2, None, None, None

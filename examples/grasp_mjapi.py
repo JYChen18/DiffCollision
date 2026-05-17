@@ -2,20 +2,19 @@ import numpy as np
 import os
 import mujoco
 import logging
+from dataclasses import replace
 
-import hydra
-from omegaconf import OmegaConf
 import torch
 import pytorch_kinematics as pk
 from diffcollision.utils import DCTensorSpec
 from diffcollision import DCMesh, DiffCollision
+from example_config import MainConfig
 
 from util.vis import vis_usd
 from util.rotation import set_seed, torch_normalize_vector, torch_quaternion_to_matrix
 
 
-@hydra.main(config_path="config", config_name="base", version_base=None)
-def main(cfg):
+def main(cfg: MainConfig):
     set_seed(cfg.seed)
     ts = DCTensorSpec(cfg.device, cfg.dtype)
     xml_path = "examples/assets/grasp_env.xml"
@@ -38,11 +37,17 @@ def main(cfg):
         ]
     ).unsqueeze(0)
 
-    dcd_cfg = OmegaConf.to_container(cfg.dcd, resolve=True)
-    diffcoll = DiffCollision.build_from_mjmodel(
-        model, tp1_o=tp1_o, tp2_o=tp2_o, **dcd_cfg
+    diffcoll = DiffCollision.from_mjmodel(
+        model,
+        config=replace(cfg.dcd, enable_debug=cfg.vis),
+        tp1_o=tp1_o,
+        tp2_o=tp2_o,
     )
-    hand_body_name = diffcoll.cfg._mesh_names[:-1]
+    mesh_names = [
+        mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, int(mesh_id))
+        for mesh_id in diffcoll.ctx.mesh_ids
+    ]
+    hand_body_name = mesh_names[:-1]
 
     T_obj = ts.to(torch.eye(4)[None])
     joint_angle = ts.to(data["grasp_qpos"])
@@ -81,8 +86,10 @@ def main(cfg):
             print(f"cpidx: {res.cpidx}")
             print(f"normal: {res.normal}")
             cpidx = res.cpidx.tolist()[0]
-            names = diffcoll.cfg._mesh_names
-            print([(names[cpidx[i][0]], names[cpidx[i][1]]) for i in range(5)])
+            id_to_name = dict(zip(diffcoll.ctx.mesh_ids.tolist(), mesh_names))
+            print(
+                [(id_to_name[cpidx[i][0]], id_to_name[cpidx[i][1]]) for i in range(5)]
+            )
         loss = (
             (
                 (
@@ -138,4 +145,4 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    main()
+    main(MainConfig.from_yaml("examples/config/base.yaml").cli())

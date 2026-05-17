@@ -1,10 +1,10 @@
-uv run examples/main.py exp=margin0_RS1DirBase_objv_cx egt=False dcd.method=RS1Dir dcd.sample=nbr margin=0.0 'convex=[True, True]' asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=margin0_RS1DirBase_objv_cc egt=False dcd.method=RS1Dir dcd.sample=nbr margin=0.0 'convex=[False, False]' asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=margin1e-5_RS1DirBase_objv_cx egt=False dcd.method=RS1Dir dcd.sample=nbr margin=0.00001 'convex=[True, True]' asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=margin1e-5_RS1DirBase_objv_cc egt=False dcd.method=RS1Dir dcd.sample=nbr margin=0.00001 'convex=[False, False]' asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=margin1e-4_RS1DirBase_objv_cx egt=False dcd.method=RS1Dir dcd.sample=nbr margin=0.0001 'convex=[True, True]' asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=margin1e-4_RS1DirBase_objv_cc egt=False dcd.method=RS1Dir dcd.sample=nbr margin=0.0001 'convex=[False, False]' asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=margin1e-3_RS1DirBase_objv_cx egt=False dcd.method=RS1Dir dcd.sample=nbr margin=0.001 'convex=[True, True]' asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=margin1e-3_RS1DirBase_objv_cc egt=False dcd.method=RS1Dir dcd.sample=nbr margin=0.001 'convex=[False, False]' asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=margin1e-2_RS1DirBase_objv_cx egt=False dcd.method=RS1Dir dcd.sample=nbr margin=0.01 'convex=[True, True]' asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=margin1e-2_RS1DirBase_objv_cc egt=False dcd.method=RS1Dir dcd.sample=nbr margin=0.01 'convex=[False, False]' asset_dir=examples/assets/object/objaverse_5k/processed_data
+uv run examples/main.py --exp margin0_RS1DirBase_objv_cx --margin 0.0 --convex True True --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.no-egt --dcd.sample nbr
+uv run examples/main.py --exp margin0_RS1DirBase_objv_cc --margin 0.0 --convex False False --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.no-egt --dcd.sample nbr
+uv run examples/main.py --exp margin1e-5_RS1DirBase_objv_cx --margin 0.00001 --convex True True --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.no-egt --dcd.sample nbr
+uv run examples/main.py --exp margin1e-5_RS1DirBase_objv_cc --margin 0.00001 --convex False False --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.no-egt --dcd.sample nbr
+uv run examples/main.py --exp margin1e-4_RS1DirBase_objv_cx --margin 0.0001 --convex True True --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.no-egt --dcd.sample nbr
+uv run examples/main.py --exp margin1e-4_RS1DirBase_objv_cc --margin 0.0001 --convex False False --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.no-egt --dcd.sample nbr
+uv run examples/main.py --exp margin1e-3_RS1DirBase_objv_cx --margin 0.001 --convex True True --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.no-egt --dcd.sample nbr
+uv run examples/main.py --exp margin1e-3_RS1DirBase_objv_cc --margin 0.001 --convex False False --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.no-egt --dcd.sample nbr
+uv run examples/main.py --exp margin1e-2_RS1DirBase_objv_cx --margin 0.01 --convex True True --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.no-egt --dcd.sample nbr
+uv run examples/main.py --exp margin1e-2_RS1DirBase_objv_cc --margin 0.01 --convex False False --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.no-egt --dcd.sample nbr

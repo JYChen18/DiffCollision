@@ -1,14 +1,14 @@
-uv run examples/main.py exp=lr1_RS1DirBest_objv_cx 'convex=[True, True]' step_r=1 step_t=0.001 dcd.method=RS1Dir asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=lr2_RS1DirBest_objv_cx 'convex=[True, True]' step_r=2 step_t=0.002 dcd.method=RS1Dir asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=lr5_RS1DirBest_objv_cx 'convex=[True, True]' step_r=5 step_t=0.005 dcd.method=RS1Dir asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=lr10_RS1DirBest_objv_cx 'convex=[True, True]' step_r=10 step_t=0.01 dcd.method=RS1Dir asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=lr20_RS1DirBest_objv_cx 'convex=[True, True]' step_r=20 step_t=0.02 dcd.method=RS1Dir asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=lr50_RS1DirBest_objv_cx 'convex=[True, True]' step_r=50 step_t=0.05 dcd.method=RS1Dir asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=lr100_RS1DirBest_objv_cx 'convex=[True, True]' step_r=100 step_t=0.1 dcd.method=RS1Dir asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=lr1_RS1DirBest_objv_cc 'convex=[False, False]' step_r=1 step_t=0.001 dcd.method=RS1Dir asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=lr2_RS1DirBest_objv_cc 'convex=[False, False]' step_r=2 step_t=0.002 dcd.method=RS1Dir asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=lr5_RS1DirBest_objv_cc 'convex=[False, False]' step_r=5 step_t=0.005 dcd.method=RS1Dir asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=lr10_RS1DirBest_objv_cc 'convex=[False, False]' step_r=10 step_t=0.01 dcd.method=RS1Dir asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=lr20_RS1DirBest_objv_cc 'convex=[False, False]' step_r=20 step_t=0.02 dcd.method=RS1Dir asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=lr50_RS1DirBest_objv_cc 'convex=[False, False]' step_r=50 step_t=0.05 dcd.method=RS1Dir asset_dir=examples/assets/object/objaverse_5k/processed_data
-uv run examples/main.py exp=lr100_RS1DirBest_objv_cc 'convex=[False, False]' step_r=100 step_t=0.1 dcd.method=RS1Dir asset_dir=examples/assets/object/objaverse_5k/processed_data
+uv run examples/main.py --exp lr1_RS1DirBest_objv_cx --convex True True --step-r 1 --step-t 0.001 --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.egt-step-r 1 --dcd.egt-step-t 0.001
+uv run examples/main.py --exp lr2_RS1DirBest_objv_cx --convex True True --step-r 2 --step-t 0.002 --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.egt-step-r 2 --dcd.egt-step-t 0.002
+uv run examples/main.py --exp lr5_RS1DirBest_objv_cx --convex True True --step-r 5 --step-t 0.005 --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.egt-step-r 5 --dcd.egt-step-t 0.005
+uv run examples/main.py --exp lr10_RS1DirBest_objv_cx --convex True True --step-r 10 --step-t 0.01 --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.egt-step-r 10 --dcd.egt-step-t 0.01
+uv run examples/main.py --exp lr20_RS1DirBest_objv_cx --convex True True --step-r 20 --step-t 0.02 --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.egt-step-r 20 --dcd.egt-step-t 0.02
+uv run examples/main.py --exp lr50_RS1DirBest_objv_cx --convex True True --step-r 50 --step-t 0.05 --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.egt-step-r 50 --dcd.egt-step-t 0.05
+uv run examples/main.py --exp lr100_RS1DirBest_objv_cx --convex True True --step-r 100 --step-t 0.1 --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.egt-step-r 100 --dcd.egt-step-t 0.1
+uv run examples/main.py --exp lr1_RS1DirBest_objv_cc --convex False False --step-r 1 --step-t 0.001 --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.egt-step-r 1 --dcd.egt-step-t 0.001
+uv run examples/main.py --exp lr2_RS1DirBest_objv_cc --convex False False --step-r 2 --step-t 0.002 --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.egt-step-r 2 --dcd.egt-step-t 0.002
+uv run examples/main.py --exp lr5_RS1DirBest_objv_cc --convex False False --step-r 5 --step-t 0.005 --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.egt-step-r 5 --dcd.egt-step-t 0.005
+uv run examples/main.py --exp lr10_RS1DirBest_objv_cc --convex False False --step-r 10 --step-t 0.01 --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.egt-step-r 10 --dcd.egt-step-t 0.01
+uv run examples/main.py --exp lr20_RS1DirBest_objv_cc --convex False False --step-r 20 --step-t 0.02 --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.egt-step-r 20 --dcd.egt-step-t 0.02
+uv run examples/main.py --exp lr50_RS1DirBest_objv_cc --convex False False --step-r 50 --step-t 0.05 --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.egt-step-r 50 --dcd.egt-step-t 0.05
+uv run examples/main.py --exp lr100_RS1DirBest_objv_cc --convex False False --step-r 100 --step-t 0.1 --asset-dir examples/assets/object/objaverse_5k/processed_data dcd:RS1Dir --dcd.egt-step-r 100 --dcd.egt-step-t 0.1

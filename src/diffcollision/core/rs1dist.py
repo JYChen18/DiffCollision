@@ -1,9 +1,10 @@
 from dataclasses import dataclass
+from typing import Literal
 import torch
 import numpy as np
 
 from diffcollision.cpp._coal_openmp import batched_get_neighbor
-from diffcollision.core.base import _BaseCollision, _BaseConfig
+from diffcollision.core.base import _BaseCollision, BaseCollisionConfig, DCContext
 from diffcollision.utils import (
     local_sample_w_dthre,
     global_sample_v_and_f,
@@ -12,7 +13,7 @@ from diffcollision.utils import (
 
 
 @dataclass
-class RS1DistConfig(_BaseConfig):
+class RS1DistConfig(BaseCollisionConfig):
     """
     Configuration for `method="RS1Dist"` in `DiffCollision`.
 
@@ -32,12 +33,6 @@ class RS1DistConfig(_BaseConfig):
         - "fix": Fixed sampling around witness points.
         - "nbr": Neighbor-based sampling on the mesh surface.
         Default: "fix".
-    tp1_o : torch.Tensor, optional
-        Target points in the **object local frame** on the first mesh of each collision pair.
-        Required if `sample` is "adp", otherwise used only for debugging. Default: None.
-    tp2_o : torch.Tensor, optional
-        Target points in the **object local frame** on the first mesh of each collision pair.
-        Required if `sample` is "adp", otherwise used only for debugging. Default: None.
     n_global : int, optional
         Number of global samples. Required if `sample` is "adp" or "fix". Default: 1024.
     n_local : int, optional
@@ -55,6 +50,7 @@ class RS1DistConfig(_BaseConfig):
         Required if `sample` is "adp" or "fix". Default: 2 * np.pi / 3 (unit: radian).
     """
 
+    type: Literal["RS1Dist"] = "RS1Dist"
     sample: str = "fix"
     n_global: int = 1024
     n_local: int = 16
@@ -63,66 +59,62 @@ class RS1DistConfig(_BaseConfig):
     min_dthre: float = 0.01
     nthre: float = 2 * np.pi / 3
 
-    # --- For each mesh ---
-    _gs_o_mesh: torch.Tensor = None  # global samples in the object local frame
-    _dthre_mesh: list[float] = None  # distance thresholds
-    _min_dthre_mesh: list[float] = None  # min distance thresholds
-
-    # --- For each collision pair ---
-    _tp_o: torch.Tensor = None  # target points in the object local frame
-    _gs_o_pair: torch.Tensor = None
-    _dthre_pair: list[float] = None
-    _min_dthre_pair: list[float] = None
-
-    def prepare_for_backward(self, batch):
-        if self.sample == "adp":
-            if self.tp1_o is None or self.tp2_o is None:
-                raise ValueError(
-                    "Please specify target points `tp1_o` and `tp2_o` when using adaptive sampling"
-                )
-            else:
-                assert (
-                    len(self.tp1_o.shape) == 3 and len(self.tp2_o.shape) == 3
-                ), "tp1_o and tp2_o should have shape (batch, n_pair, 3)"
-                self._tp_o = torch.stack([self.tp1_o, self.tp2_o], dim=-2).reshape(
-                    -1, 3
-                )
-
-        # Prepare global samples and distance thresholds for each mesh pair. No update.
-        n_mesh = len(self._meshes)
-        if self._gs_o_mesh is None:
-            self._dthre_mesh = self._ts.to(torch.zeros(n_mesh))
-            self._min_dthre_mesh = self._ts.to(torch.zeros(n_mesh))
-            self._gs_o_mesh = self._ts.to(torch.zeros(n_mesh, self.n_global, 6))
-            for i, m in enumerate(self._meshes):
-                cm, fm = m.coarse_mesh, m.fine_mesh
-                obj_scale = np.linalg.norm(cm.bounds[0] - cm.bounds[1])
-                safe_dthre = 2 * np.sqrt(self.n_local * cm.area / np.pi / self.n_global)
-                self._dthre_mesh[i] = self.dthre * obj_scale
-                self._min_dthre_mesh[i] = max(safe_dthre, self.min_dthre)
-                self._gs_o_mesh[i, :, :3], self._gs_o_mesh[i, :, 3:] = (
-                    global_sample_v_and_f(cm, fm, self.n_global)
-                )
-
-        # Prepare per mesh-pair parameters. Update when collision pairs change.
-        m2g_idx = torch.stack([self._ml2mp_idx1, self._ml2mp_idx2], dim=-1).reshape(-1)
-        self._dthre_pair = self._dthre_mesh[m2g_idx].repeat(batch)
-        self._min_dthre_pair = self._min_dthre_mesh[m2g_idx].repeat(batch)
-        self._gs_o_pair = self._gs_o_mesh[m2g_idx].repeat(batch, 1, 1)
-        return
-
-    def update_collision_pairs(self, collision_pairs, tp1_o, tp2_o, margin=None):
-        super().update_collision_pairs(collision_pairs, tp1_o, tp2_o, margin)
-        self._gs_o_pair = self._dthre_pair = self._min_dthre_pair = None
-        return
+    @property
+    def method(self):
+        return RS1DistCollision
 
 
-def _local_sample(cfg: RS1DistConfig, T1, T2, wp1, wp2, normal, batch):
+def _prepare_for_backward(cfg: RS1DistConfig, dc_ctx: DCContext, batch):
+    if cfg.sample == "adp":
+        if dc_ctx.tp_o is None:
+            raise ValueError(
+                "Please specify target points `tp1_o` and `tp2_o` when using adaptive sampling"
+            )
+        if dc_ctx.tp1_o.shape[0] != batch:
+            raise ValueError(
+                "tp1_o and tp2_o batch dimension should match the transforms batch size"
+            )
+
+    # Prepare global samples and distance thresholds for each mesh pair. No update.
+    n_mesh = len(dc_ctx.meshes)
+    if dc_ctx.gs_o_mesh is None:
+        dc_ctx.dthre_mesh = dc_ctx.ts.to(torch.zeros(n_mesh))
+        dc_ctx.min_dthre_mesh = dc_ctx.ts.to(torch.zeros(n_mesh))
+        dc_ctx.gs_o_mesh = dc_ctx.ts.to(torch.zeros(n_mesh, cfg.n_global, 6))
+        for i, m in enumerate(dc_ctx.meshes):
+            cm, fm = m.coarse_mesh, m.fine_mesh
+            obj_scale = np.linalg.norm(cm.bounds[0] - cm.bounds[1])
+            safe_dthre = 2 * np.sqrt(cfg.n_local * cm.area / np.pi / cfg.n_global)
+            dc_ctx.dthre_mesh[i] = cfg.dthre * obj_scale
+            dc_ctx.min_dthre_mesh[i] = max(safe_dthre, cfg.min_dthre)
+            dc_ctx.gs_o_mesh[i, :, :3], dc_ctx.gs_o_mesh[i, :, 3:] = (
+                global_sample_v_and_f(cm, fm, cfg.n_global)
+            )
+
+    # Prepare per mesh-pair parameters. Update when collision pairs change.
+    m2g_idx = torch.stack([dc_ctx.ml2mp_idx1, dc_ctx.ml2mp_idx2], dim=-1).reshape(-1)
+    dc_ctx.dthre_pair = dc_ctx.dthre_mesh[m2g_idx].repeat(batch)
+    dc_ctx.min_dthre_pair = dc_ctx.min_dthre_mesh[m2g_idx].repeat(batch)
+    dc_ctx.gs_o_pair = dc_ctx.gs_o_mesh[m2g_idx].repeat(batch, 1, 1)
+    return
+
+
+def _local_sample(
+    cfg: RS1DistConfig,
+    dc_ctx: DCContext,
+    T1,
+    T2,
+    wp1,
+    wp2,
+    normal,
+    batch,
+    cvx_min_idx=None,
+):
     if cfg.sample == "adp" or cfg.sample == "fix":
-        if cfg._gs_o_pair is None:
-            cfg.prepare_for_backward(batch)
-        tp_o, gs_o, n_local = cfg._tp_o, cfg._gs_o_pair, cfg.n_local
-        dthre, min_dthre = cfg._dthre_pair, cfg._min_dthre_pair
+        if dc_ctx.gs_o_pair is None:
+            _prepare_for_backward(cfg, dc_ctx, batch)
+        tp_o, gs_o, n_local = dc_ctx.tp_o, dc_ctx.gs_o_pair, cfg.n_local
+        dthre, min_dthre = dc_ctx.dthre_pair, dc_ctx.min_dthre_pair
 
         # Transform witness points from world frame to object local frame
         T = torch.stack([T1, T2], dim=-3).reshape(-1, 4, 4)
@@ -137,17 +129,17 @@ def _local_sample(cfg: RS1DistConfig, T1, T2, wp1, wp2, normal, batch):
         )
         ls_o = ls_o.reshape(-1, 2, n_local, 6)
     elif cfg.sample == "nbr":
-        ts, n_level, n_local = cfg._ts, cfg.n_level, cfg.n_local
+        ts, n_level, n_local = dc_ctx.ts, cfg.n_level, cfg.n_local
         ls_o = np.zeros((batch, 2, n_local, 6))
         normal1_o = torch.einsum("bji,bj->bi", T1[:, :3, :3], normal)
         normal2_o = torch.einsum("bji,bj->bi", T2[:, :3, :3], -normal)
         normal_o = torch.stack([normal1_o, normal2_o], dim=-2)
         cvx_idx = torch.cat(
-            [cfg._cl2cp_idx1[cfg._cvx_min_idx], cfg._cl2cp_idx2[cfg._cvx_min_idx]],
+            [dc_ctx.cl2cp_idx1[cvx_min_idx], dc_ctx.cl2cp_idx2[cvx_min_idx]],
             dim=-1,
         )
         batched_get_neighbor(
-            cfg._cvx_lst,
+            dc_ctx.cvx_lst,
             cvx_idx.cpu().numpy().reshape(-1),
             normal_o.cpu().numpy().reshape(-1),
             2 * batch,
@@ -176,9 +168,12 @@ class RS1DistCollision(_BaseCollision):
         wp1, wp2 = wp1_raw.view(b * p, 3), wp2_raw.view(b * p, 3)
         dist, normal = dist_raw.view(b * p, 1), normal_raw.view(b * p, 3)
         cfg: RS1DistConfig = ctx.cfg
+        dc_ctx: DCContext = ctx.dc_ctx
 
         with torch.no_grad():
-            ls1_o, ls2_o = _local_sample(cfg, T1, T2, wp1, wp2, normal, b)
+            ls1_o, ls2_o = _local_sample(
+                cfg, dc_ctx, T1, T2, wp1, wp2, normal, b, ctx.cvx_min_idx
+            )
             if ctx.vis is not None:
                 ls1 = (
                     ls1_o[..., :3] @ T1[:, :3, :3].transpose(-1, -2)
@@ -208,7 +203,7 @@ class RS1DistCollision(_BaseCollision):
         # solve the system of equations:
         #   (1) J_wp1_T1 = J_f_wp2 @ J_wp2_T1 + J_f_T1
         #   (2) J_wp2_T1 = J_g_wp1 @ J_wp1_T1
-        help_eye = cfg._ts.to(torch.eye(3)[None].expand(b * p, -1, -1))
+        help_eye = dc_ctx.ts.to(torch.eye(3)[None].expand(b * p, -1, -1))
         J_wp1_T1 = torch.linalg.solve(
             help_eye - J_f_wp2 @ J_g_wp1, J_f_T1.view(b * p, 3, 16)
         ).view(b * p, 3, 4, 4)
@@ -251,4 +246,4 @@ class RS1DistCollision(_BaseCollision):
                 "bpijk, bpi -> bpjk", J_n_T2.view(b, p, 3, 4, 4), grad_n
             )
 
-        return grad1, grad2, None, None
+        return grad1, grad2, None, None, None
