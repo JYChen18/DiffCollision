@@ -95,7 +95,7 @@ def main(cfg: MainConfig):
                 (
                     res.wp1[:, :collision_num]
                     - res.wp2[:, :collision_num]
-                    + cfg.margin * res.normal[:, :collision_num]
+                    + cfg.target_margin * res.normal[:, :collision_num]
                 )
                 ** 2
             ).sum()

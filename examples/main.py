@@ -93,7 +93,6 @@ def single_problem(prob_id, cfg):
     diffcoll = DiffCollision(
         [mesh1, mesh2],
         config=replace(cfg.dcd, enable_debug=cfg.vis),
-        margin=cfg.margin,
         tp1_o=tp1_o,
         tp2_o=tp2_o,
     )
@@ -124,7 +123,10 @@ def single_problem(prob_id, cfg):
             T2.grad = None
         res = diffcoll.forward(torch.stack([T1, T2], dim=-3))
         loss = (
-            ((res.wp1[:, 0] - res.wp2[:, 0] + cfg.margin * res.normal[:, 0]) ** 2).sum()
+            (
+                (res.wp1[:, 0] - res.wp2[:, 0] + cfg.target_margin * res.normal[:, 0])
+                ** 2
+            ).sum()
             + ((tp1_o[:, 0] - res.wp1_o[:, 0]) ** 2).sum()
             + ((tp2_o[:, 0] - res.wp2_o[:, 0]) ** 2).sum()
         )
@@ -152,9 +154,10 @@ def single_problem(prob_id, cfg):
     with torch.no_grad():
         res = diffcoll.forward(torch.stack([T1, T2], dim=-3), skip_debug=True)
         final_loss = (
-            ((res.wp1[:, 0] - res.wp2[:, 0] + cfg.margin * res.normal[:, 0]) ** 2).sum(
-                dim=-1
-            )
+            (
+                (res.wp1[:, 0] - res.wp2[:, 0] + cfg.target_margin * res.normal[:, 0])
+                ** 2
+            ).sum(dim=-1)
             + ((tp1_o[:, 0] - res.wp1_o[:, 0]) ** 2).sum(dim=-1)
             + ((tp2_o[:, 0] - res.wp2_o[:, 0]) ** 2).sum(dim=-1)
         )

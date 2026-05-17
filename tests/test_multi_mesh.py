@@ -32,7 +32,7 @@ def mesh_lst():
 
 
 @pytest.fixture(scope="module")
-def collision_pairs():
+def mesh_pairs():
     return torch.tensor([[0, 1], [3, 2], [1, 4]])
 
 
@@ -41,10 +41,10 @@ def shuffle_lst():
     return [2, 0, 1]
 
 
-def sample_target_points_for_pairs(mesh_lst, collision_pairs):
+def sample_target_points_for_pairs(mesh_lst, mesh_pairs):
     set_seed(1)
     tp1_o, tp2_o = [], []
-    for idx1, idx2 in collision_pairs:
+    for idx1, idx2 in mesh_pairs:
         tp1_single, tp2_single = sample_target_point(
             mesh_lst[idx1], mesh_lst[idx2], 7, ["v", "v"], True
         )
@@ -54,8 +54,8 @@ def sample_target_points_for_pairs(mesh_lst, collision_pairs):
 
 
 @pytest.fixture(scope="module")
-def target_points(mesh_lst, collision_pairs):
-    return sample_target_points_for_pairs(mesh_lst, collision_pairs)
+def target_points(mesh_lst, mesh_pairs):
+    return sample_target_points_for_pairs(mesh_lst, mesh_pairs)
 
 
 def make_transforms():
@@ -65,33 +65,31 @@ def make_transforms():
     return T
 
 
-def assert_forward_matches_pair_order(mesh_lst, collision_pairs, pair_order):
-    diffcoll = DiffCollision(mesh_lst, collision_pairs=collision_pairs)
-    ordered_diffcoll = DiffCollision(
-        mesh_lst, collision_pairs=collision_pairs[pair_order]
-    )
+def assert_forward_matches_pair_order(mesh_lst, mesh_pairs, pair_order):
+    diffcoll = DiffCollision(mesh_lst, mesh_pairs=mesh_pairs)
+    ordered_diffcoll = DiffCollision(mesh_lst, mesh_pairs=mesh_pairs[pair_order])
     T = make_transforms()
     res = diffcoll.forward(T, return_local=False)
     ordered_res = ordered_diffcoll.forward(T, return_local=False)
     assert (res.sdf[:, pair_order] - ordered_res.sdf[:, :3]).abs().max() < 1e-10
 
 
-def test_collision_pairs_forward(mesh_lst, collision_pairs):
-    assert_forward_matches_pair_order(mesh_lst, collision_pairs, [0, 1, 2])
+def test_mesh_pairs_forward(mesh_lst, mesh_pairs):
+    assert_forward_matches_pair_order(mesh_lst, mesh_pairs, [0, 1, 2])
     logging.info("Pass forward test")
 
 
-def test_shuffled_collision_pairs_forward(mesh_lst, collision_pairs, shuffle_lst):
-    assert_forward_matches_pair_order(mesh_lst, collision_pairs, shuffle_lst)
+def test_shuffled_mesh_pairs_forward(mesh_lst, mesh_pairs, shuffle_lst):
+    assert_forward_matches_pair_order(mesh_lst, mesh_pairs, shuffle_lst)
     logging.info("Pass shuffled forward test")
 
 
-def assert_backward_converges(mesh_lst, collision_pairs, tp1_o, tp2_o):
+def assert_backward_converges(mesh_lst, mesh_pairs, tp1_o, tp2_o):
     step_r = 10.0
     step_t = 0.1
     diffcoll = DiffCollision(
         mesh_lst,
-        collision_pairs=collision_pairs,
+        mesh_pairs=mesh_pairs,
         config=RS1DistConfig(egt_step_r=step_r, egt_step_t=step_t),
         tp1_o=tp1_o,
         tp2_o=tp2_o,
@@ -117,19 +115,19 @@ def assert_backward_converges(mesh_lst, collision_pairs, tp1_o, tp2_o):
     assert loss < 5e-5
 
 
-def test_collision_pairs_backward(mesh_lst, collision_pairs, target_points):
+def test_mesh_pairs_backward(mesh_lst, mesh_pairs, target_points):
     tp1_o, tp2_o = target_points
-    assert_backward_converges(mesh_lst, collision_pairs, tp1_o, tp2_o)
+    assert_backward_converges(mesh_lst, mesh_pairs, tp1_o, tp2_o)
     logging.info("Pass backward test")
 
 
-def test_shuffled_collision_pairs_backward(
-    mesh_lst, collision_pairs, shuffle_lst, target_points
+def test_shuffled_mesh_pairs_backward(
+    mesh_lst, mesh_pairs, shuffle_lst, target_points
 ):
     tp1_o, tp2_o = target_points
     assert_backward_converges(
         mesh_lst,
-        collision_pairs[shuffle_lst],
+        mesh_pairs[shuffle_lst],
         tp1_o[:, shuffle_lst],
         tp2_o[:, shuffle_lst],
     )
@@ -150,16 +148,16 @@ if __name__ == "__main__":
         )
         mesh_lst.append(mesh)
 
-    collision_pairs = torch.tensor([[0, 1], [3, 2], [1, 4]])
+    mesh_pairs = torch.tensor([[0, 1], [3, 2], [1, 4]])
     shuffle_lst = [2, 0, 1]
 
-    assert_forward_matches_pair_order(mesh_lst, collision_pairs, [0, 1, 2])
-    assert_forward_matches_pair_order(mesh_lst, collision_pairs, shuffle_lst)
-    tp1_o, tp2_o = sample_target_points_for_pairs(mesh_lst, collision_pairs)
-    assert_backward_converges(mesh_lst, collision_pairs, tp1_o, tp2_o)
+    assert_forward_matches_pair_order(mesh_lst, mesh_pairs, [0, 1, 2])
+    assert_forward_matches_pair_order(mesh_lst, mesh_pairs, shuffle_lst)
+    tp1_o, tp2_o = sample_target_points_for_pairs(mesh_lst, mesh_pairs)
+    assert_backward_converges(mesh_lst, mesh_pairs, tp1_o, tp2_o)
     assert_backward_converges(
         mesh_lst,
-        collision_pairs[shuffle_lst],
+        mesh_pairs[shuffle_lst],
         tp1_o[:, shuffle_lst],
         tp2_o[:, shuffle_lst],
     )

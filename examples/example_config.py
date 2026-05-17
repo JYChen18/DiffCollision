@@ -35,7 +35,7 @@ class MainConfig:
     step_t: float = 0.01
     iter: int = 2000
     upd1: bool = False
-    margin: float = 0.001
+    target_margin: float = 0.001
 
     dcd: DiffCollisionConfig = field(default_factory=RS1DistConfig)
 

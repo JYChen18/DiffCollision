@@ -92,8 +92,8 @@ def _geom_pair_is_compatible(model: mujoco.MjModel, geom1: int, geom2: int) -> b
     return (contype1 & conaffinity2) != 0 or (contype2 & conaffinity1) != 0
 
 
-def _add_collision_pair(
-    collision_pair_margins: dict[tuple[int, int], float],
+def _add_mesh_pair(
+    mesh_pair_margins: dict[tuple[int, int], float],
     body1: int,
     body2: int,
     margin: float,
@@ -101,11 +101,11 @@ def _add_collision_pair(
     if body1 == body2:
         return
     pair = tuple(sorted((int(body1), int(body2))))
-    collision_pair_margins[pair] = max(collision_pair_margins.get(pair, 0.0), margin)
+    mesh_pair_margins[pair] = max(mesh_pair_margins.get(pair, 0.0), margin)
 
 
-def get_collision_pair_margins_from_mjmodel(model):
-    """Return MuJoCo body-id collision pairs and their contact margins.
+def get_mesh_pair_margins_from_mjmodel(model):
+    """Return MuJoCo body-id mesh pairs and their contact margins.
 
     DiffCollision stores one collision mesh per MuJoCo body, so this mirrors
     MuJoCo's geom-level contact filtering at body-pair granularity: a body pair
@@ -124,7 +124,7 @@ def get_collision_pair_margins_from_mjmodel(model):
 
     body_ids = sorted(body_to_geoms.keys())
     exclude_pairs = set(get_exclude_pairs_from_mjmodel(model))
-    collision_pair_margins = {}
+    mesh_pair_margins = {}
     explicit_pair_margins = {}
     explicit_geom_pairs = {
         tuple(sorted((int(model.pair_geom1[pair_id]), int(model.pair_geom2[pair_id]))))
@@ -156,9 +156,7 @@ def get_collision_pair_margins_from_mjmodel(model):
                     if not _geom_pair_is_compatible(model, geom1, geom2):
                         continue
                     margin = float(model.geom_margin[geom1] + model.geom_margin[geom2])
-                    _add_collision_pair(
-                        collision_pair_margins, body1, body2, margin
-                    )
+                    _add_mesh_pair(mesh_pair_margins, body1, body2, margin)
 
     for pair_id in range(model.npair):
         geom1 = int(model.pair_geom1[pair_id])
@@ -168,14 +166,14 @@ def get_collision_pair_margins_from_mjmodel(model):
         name1 = _body_name(model, body1)
         name2 = _body_name(model, body2)
         if (name1, name2) not in exclude_pairs:
-            _add_collision_pair(
+            _add_mesh_pair(
                 explicit_pair_margins, body1, body2, float(model.pair_margin[pair_id])
             )
 
     for (body1, body2), margin in explicit_pair_margins.items():
-        _add_collision_pair(collision_pair_margins, body1, body2, margin)
-    return collision_pair_margins
+        _add_mesh_pair(mesh_pair_margins, body1, body2, margin)
+    return mesh_pair_margins
 
 
-def get_collision_pairs_from_mjmodel(model):
-    return set(get_collision_pair_margins_from_mjmodel(model).keys())
+def get_mesh_pairs_from_mjmodel(model):
+    return set(get_mesh_pair_margins_from_mjmodel(model).keys())

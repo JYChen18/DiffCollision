@@ -91,7 +91,7 @@ def _prepare_for_backward(cfg: RS1DistConfig, dc_ctx: DCContext, batch):
                 global_sample_v_and_f(cm, fm, cfg.n_global)
             )
 
-    # Prepare per mesh-pair parameters. Update when collision pairs change.
+    # Prepare per mesh-pair parameters. Update when mesh pairs change.
     m2g_idx = torch.stack([dc_ctx.ml2mp_idx1, dc_ctx.ml2mp_idx2], dim=-1).reshape(-1)
     dc_ctx.dthre_pair = dc_ctx.dthre_mesh[m2g_idx].repeat(batch)
     dc_ctx.min_dthre_pair = dc_ctx.min_dthre_mesh[m2g_idx].repeat(batch)

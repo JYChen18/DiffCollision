@@ -49,27 +49,27 @@ def test_forward(mesh_lst, ts):
     logging.info("Pass forward test")
 
 
-def test_init_scalar_margin_expands_into_context(mesh_lst, ts):
+def test_init_scalar_pair_margin_expands_into_context(mesh_lst, ts):
     diffcoll = DiffCollision(
         mesh_lst,
         config=RS1DistConfig(per_env_max_contact_num=3),
-        margin=0.5,
+        pair_margin=0.5,
     )
 
     assert diffcoll.cfg.per_env_max_contact_num == 3
-    assert diffcoll.ctx.margin.shape == (1,)
-    assert torch.allclose(diffcoll.ctx.margin, ts.to([0.5]))
+    assert diffcoll.ctx.pair_margin.shape == (1,)
+    assert torch.allclose(diffcoll.ctx.pair_margin, ts.to([0.5]))
 
 
 def test_init_pair_margin_stays_pair_aligned(mesh_lst, ts):
     diffcoll = DiffCollision(
         [mesh_lst[0], mesh_lst[1], mesh_lst[0]],
-        collision_pairs=[[0, 1], [1, 2]],
-        margin=ts.to([0.2, 0.3]),
+        mesh_pairs=[[0, 1], [1, 2]],
+        pair_margin=ts.to([0.2, 0.3]),
     )
 
-    assert diffcoll.ctx.margin.shape == (2,)
-    assert torch.allclose(diffcoll.ctx.margin, ts.to([0.2, 0.3]))
+    assert diffcoll.ctx.pair_margin.shape == (2,)
+    assert torch.allclose(diffcoll.ctx.pair_margin, ts.to([0.2, 0.3]))
 
 
 def test_target_points_validate_pair_shape(mesh_lst, ts):

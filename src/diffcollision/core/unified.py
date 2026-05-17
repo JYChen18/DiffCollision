@@ -14,7 +14,7 @@ from diffcollision.core.analytical import AnalyticalCollision, AnalyticalConfig
 from diffcollision.io import DCMesh
 from diffcollision.mjmesh import (
     get_mesh_from_mjmodel,
-    get_collision_pair_margins_from_mjmodel,
+    get_mesh_pair_margins_from_mjmodel,
 )
 from diffcollision.core.base import DCContext
 
@@ -77,14 +77,14 @@ class DCResult:
     Attributes
     ----------
     wp1, wp2 : torch.Tensor, shape (b, p, 3)
-        Witness points in the **world frame** for each collision pair.
+        Witness points in the **world frame** for each mesh pair.
     normal : torch.Tensor, shape (b, p, 3)
         Contact normal in the **world frame**, pointing outward from object 1 (even when penetrating).
     sdf : torch.Tensor, shape (b, p)
         Signed distance between witness points. Positive if separated, negative if penetrating.
 
     wp1_o, wp2_o : torch.Tensor, optional
-        Witness points in the **object local frame** of each collision pair.
+        Witness points in the **object local frame** of each mesh pair.
     n1_o, n2_o : torch.Tensor, optional
         Contact normals in the **object local frame**.
         `n1_o` points outward from object 1, and `n2_o` points outward from object 2.
@@ -138,10 +138,10 @@ class DiffCollision:
     Example
     -------
     >>> diffcoll = DiffCollision(
-    ...     meshes, collision_pairs=[[0, 1]], config=RS1DistConfig()
+    ...     meshes, mesh_pairs=[[0, 1]], config=RS1DistConfig()
     ... )
     >>> result = diffcoll.forward(transforms)
-    >>> wp1, wp2 = result.wp1, result.wp2   # witness points on each collision pair (in world frame)
+    >>> wp1, wp2 = result.wp1, result.wp2   # witness points on each mesh pair (in world frame)
     >>> n, sdf = result.normal, result.sdf  # contact normal & signed distance (in world frame)
     >>> w1_o, w2_o = result.w1_o, result.w2_o   # in object local frame
     >>> n1_o, n2_o = result.n1_o, result.n2_o   # in object local frame
@@ -150,9 +150,9 @@ class DiffCollision:
     def __init__(
         self,
         meshes: list[DCMesh],
-        collision_pairs: list[tuple[int, int]] | torch.Tensor = None,
+        mesh_pairs: list[tuple[int, int]] | torch.Tensor = None,
         mesh_ids: list[int] | torch.Tensor = None,
-        margin: float | list | torch.Tensor = 10.0,
+        pair_margin: float | list | torch.Tensor = 10.0,
         tp1_o: torch.Tensor | None = None,
         tp2_o: torch.Tensor | None = None,
         config: DiffCollisionConfig = RS1DirConfig(),
@@ -164,7 +164,7 @@ class DiffCollision:
         ----------
         meshes : list[DCMesh], optional
             Meshes to evaluate. May be omitted when `mj_model` is supplied.
-        collision_pairs : list of tuple(int, int) or torch.Tensor, optional
+        mesh_pairs : list of tuple(int, int) or torch.Tensor, optional
             Mesh id pairs to evaluate. Defaults to all unique pairs, or to
             MuJoCo-compatible pairs when `mj_model` is supplied.
         mesh_ids : list[int] or torch.Tensor, optional
@@ -172,8 +172,8 @@ class DiffCollision:
             body ids when `mj_model` is supplied.
         config : DiffCollisionConfig, optional
             Collision method config. Defaults to `RS1DirConfig()`.
-        margin : float, list, or torch.Tensor, optional
-            Broad-phase pruning margin. May be a scalar or one value per collision pair.
+        pair_margin : float, list, or torch.Tensor, optional
+            Contact detection distance threshold. May be a scalar or one value per mesh pair.
         tp1_o, tp2_o : torch.Tensor, optional
             Target points in object-local frame, with shape `(batch, n_pair, 3)`.
             Required when using adaptive sampling.
@@ -184,9 +184,9 @@ class DiffCollision:
 
         self.ctx = DCContext.from_meshes(
             meshes,
-            collision_pairs,
+            mesh_pairs,
             mesh_ids,
-            margin,
+            pair_margin,
             tp1_o,
             tp2_o,
         )
@@ -213,17 +213,15 @@ class DiffCollision:
             ]
             meshes = list(dcmesh_dict.values())
 
-            collision_pair_margins = get_collision_pair_margins_from_mjmodel(mj_model)
-            collision_pairs = list(collision_pair_margins.keys())
-            pair_margins = ts.to(
-                [collision_pair_margins[pair] for pair in collision_pairs]
-            )
+            mesh_pair_margins = get_mesh_pair_margins_from_mjmodel(mj_model)
+            mesh_pairs = list(mesh_pair_margins.keys())
+            pair_margins = ts.to([mesh_pair_margins[pair] for pair in mesh_pairs])
 
         return cls(
             meshes=meshes,
-            collision_pairs=collision_pairs,
+            mesh_pairs=mesh_pairs,
             mesh_ids=mesh_ids,
-            margin=pair_margins,
+            pair_margin=pair_margins,
             config=config,
         )
 

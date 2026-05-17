@@ -22,10 +22,10 @@ from diffcollision import DiffCollision, DCMesh
 
 # Load meshes and define mesh pairs for collision detection
 meshes = [DCMesh.from_file(f"obj{i}.obj", scale=0.1) for i in range(7)]
-collision_pairs = [[0, 1], [0, 3], [3, 2], [1, 6], [6, 5]]  # total 5 mesh pairs
+mesh_pairs = [[0, 1], [0, 3], [3, 2], [1, 6], [6, 5]]  # total 5 mesh pairs
 
 # Initialize differentiable collision module
-diffcoll = DiffCollision(meshes, collision_pairs)
+diffcoll = DiffCollision(meshes, mesh_pairs)
 
 # Batched transformation matrices for each mesh, shape (batch, n_mesh, 4, 4)
 transforms = torch.eye(4, requires_grad=True)[None, None].expand(13, 7, 4, 4)
@@ -36,7 +36,7 @@ result = diffcoll.forward(transforms)   # including wp1/wp2, normal, sdf, etc.
 ```
 For more examples:
 - `tests/test_sphere.py` — basic usage & installation verification
-- `tests/test_multi_mesh.py` — dynamic updates of collision pairs at runtime
+- `tests/test_multi_mesh.py` — dynamic updates of mesh pairs at runtime
 
 
 ## Installation

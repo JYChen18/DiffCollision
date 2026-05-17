@@ -141,16 +141,15 @@ def main(cfg: MainConfig):
 
     obj_id = -1
     mesh_ids = list(range(len(hand_body_name))) + [obj_id]
-    collision_pairs = []
+    mesh_pairs = []
     for name in fingertip_name:
-        collision_pairs.append((obj_id, hand_body_name.index(name)))
+        mesh_pairs.append((obj_id, hand_body_name.index(name)))
 
     diffcoll = DiffCollision(
         mesh_lst,
-        collision_pairs=collision_pairs,
+        mesh_pairs=mesh_pairs,
         mesh_ids=mesh_ids,
         config=replace(cfg.dcd, enable_debug=cfg.vis),
-        margin=cfg.margin,
         tp1_o=tp1_o,
         tp2_o=tp2_o,
     )
@@ -186,11 +185,16 @@ def main(cfg: MainConfig):
         res = diffcoll.forward(torch.stack(transforms, dim=1))
         loss = (
             (
-                (res.wp1[:, :5] - res.wp2[:, :5] + cfg.margin * res.normal[:, :5]) ** 2
+                (
+                    res.wp1[:, :5]
+                    - res.wp2[:, :5]
+                    + cfg.target_margin * res.normal[:, :5]
+                )
+                ** 2
             ).sum()
             + ((tp1_o[:, :5] - res.wp1_o[:, :5]) ** 2).sum()
             + ((tp2_o[:, :5] - res.wp2_o[:, :5]) ** 2).sum()
-        ) / len(collision_pairs)
+        ) / len(mesh_pairs)
 
         loss.backward()
         if i % 100 == 0:

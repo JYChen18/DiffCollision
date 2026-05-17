@@ -31,7 +31,7 @@ step_r: 10.0
 step_t: 0.01
 iter: 2000
 upd1: False
-margin: 0.001
+target_margin: 0.001
 
 dcd:
   type: RS1Dist
