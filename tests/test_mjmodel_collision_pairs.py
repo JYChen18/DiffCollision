@@ -103,7 +103,7 @@ def test_config_from_mjmodel_exposes_body_ids_not_compact_mesh_indices():
     assert diffcoll.ctx.mesh_pair_indices.tolist() == [[0, 1]]
 
 
-def test_forward_cpidx_uses_body_ids():
+def test_forward_bodyid_uses_body_ids():
     model = _model("""
         <mujoco>
           <worldbody>
@@ -128,7 +128,14 @@ def test_forward_cpidx_uses_body_ids():
 
     body_id_a = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "a")
     body_id_b = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "b")
-    assert result.cpidx[0, 0].tolist() == [body_id_a, body_id_b]
+    assert result.bodyid[0, 0].tolist() == [body_id_a, body_id_b]
+    assert result.pos.shape[-2:] == (2, 3)
+    assert result.pos_o.shape[-2:] == (2, 3)
+    assert result.frame.shape[-2:] == (3, 3)
+    assert not hasattr(result, "wp1")
+    assert not hasattr(result, "normal")
+    assert not hasattr(result, "sdf")
+    assert not hasattr(result, "n1_o")
 
 
 def test_config_from_mjmodel_reads_pair_margin_tensor_from_mujoco_geoms():

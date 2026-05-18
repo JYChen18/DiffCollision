@@ -11,7 +11,6 @@ from util.rotation import (
     torch_quaternion_to_matrix,
     sample_target_point,
 )
-from util.vis import vis_usd
 
 from diffcollision.utils import (
     DCTensorSpec,
@@ -124,11 +123,15 @@ def single_problem(prob_id, cfg):
         res = diffcoll.forward(torch.stack([T1, T2], dim=-3))
         loss = (
             (
-                (res.wp1[:, 0] - res.wp2[:, 0] + cfg.target_margin * res.normal[:, 0])
+                (
+                    res.pos[:, 0, 0]
+                    - res.pos[:, 0, 1]
+                    + cfg.target_margin * res.frame[:, 0, 0]
+                )
                 ** 2
             ).sum()
-            + ((tp1_o[:, 0] - res.wp1_o[:, 0]) ** 2).sum()
-            + ((tp2_o[:, 0] - res.wp2_o[:, 0]) ** 2).sum()
+            + ((tp1_o[:, 0] - res.pos_o[:, 0, 0]) ** 2).sum()
+            + ((tp2_o[:, 0] - res.pos_o[:, 0, 1]) ** 2).sum()
         )
         loss.backward()
         with torch.no_grad():
@@ -155,11 +158,15 @@ def single_problem(prob_id, cfg):
         res = diffcoll.forward(torch.stack([T1, T2], dim=-3), skip_debug=True)
         final_loss = (
             (
-                (res.wp1[:, 0] - res.wp2[:, 0] + cfg.target_margin * res.normal[:, 0])
+                (
+                    res.pos[:, 0, 0]
+                    - res.pos[:, 0, 1]
+                    + cfg.target_margin * res.frame[:, 0, 0]
+                )
                 ** 2
             ).sum(dim=-1)
-            + ((tp1_o[:, 0] - res.wp1_o[:, 0]) ** 2).sum(dim=-1)
-            + ((tp2_o[:, 0] - res.wp2_o[:, 0]) ** 2).sum(dim=-1)
+            + ((tp1_o[:, 0] - res.pos_o[:, 0, 0]) ** 2).sum(dim=-1)
+            + ((tp2_o[:, 0] - res.pos_o[:, 0, 1]) ** 2).sum(dim=-1)
         )
 
         Err_Med = torch.quantile(final_loss, 0.5)
@@ -176,6 +183,8 @@ def single_problem(prob_id, cfg):
 
         # Visualization
         if cfg.vis:
+            from util.vis import vis_usd
+
             vis_ids = torch.topk(final_loss, min(10, cfg.n_tp))[-1]
             save_path = os.path.join(cfg.log_dir, "vusd", f"prob{prob_id}")
             name2material = {

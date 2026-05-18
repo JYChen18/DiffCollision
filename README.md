@@ -30,9 +30,9 @@ diffcoll = DiffCollision(meshes, mesh_pairs)
 # Batched transformation matrices for each mesh, shape (batch, n_mesh, 4, 4)
 transforms = torch.eye(4, requires_grad=True)[None, None].expand(13, 7, 4, 4)
 
-# Forward & backward. wp1/wp2: witness points, shape (batch, n_pair, 3)
-result = diffcoll.forward(transforms)   # including wp1/wp2, normal, sdf, etc.
-((result.wp1 - result.wp2) ** 2).sum().backward()   
+# Forward & backward. pos: witness points, shape (batch, n_pair, 2, 3)
+result = diffcoll.forward(transforms)   # including pos, frame, dist, bodyid, etc.
+((result.pos[..., 0, :] - result.pos[..., 1, :]) ** 2).sum().backward()
 ```
 For more examples:
 - `tests/test_sphere.py` — basic usage & installation verification

@@ -71,7 +71,7 @@ def assert_forward_matches_pair_order(mesh_lst, mesh_pairs, pair_order):
     T = make_transforms()
     res = diffcoll.forward(T, return_local=False)
     ordered_res = ordered_diffcoll.forward(T, return_local=False)
-    assert (res.sdf[:, pair_order] - ordered_res.sdf[:, :3]).abs().max() < 1e-10
+    assert (res.dist[:, pair_order] - ordered_res.dist[:, :3]).abs().max() < 1e-10
 
 
 def test_mesh_pairs_forward(mesh_lst, mesh_pairs):
@@ -102,9 +102,9 @@ def assert_backward_converges(mesh_lst, mesh_pairs, tp1_o, tp2_o):
             T.grad = None
         res = diffcoll.forward(T)
         loss = (
-            ((res.wp1[:, :3] - res.wp2[:, :3]) ** 2).sum()
-            + ((tp1_o[:, :3] - res.wp1_o[:, :3]) ** 2).sum()
-            + ((tp2_o[:, :3] - res.wp2_o[:, :3]) ** 2).sum()
+            ((res.pos[:, :3, 0] - res.pos[:, :3, 1]) ** 2).sum()
+            + ((tp1_o[:, :3] - res.pos_o[:, :3, 0]) ** 2).sum()
+            + ((tp2_o[:, :3] - res.pos_o[:, :3, 1]) ** 2).sum()
         )
         loss.backward()
         with torch.no_grad():

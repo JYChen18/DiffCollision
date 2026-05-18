@@ -5,7 +5,12 @@ import mujoco
 import tyro
 import dacite
 
-from diffcollision.utils import eqv_grad, torch_normalize_vector, DCTensorSpec
+from diffcollision.utils import (
+    eqv_grad,
+    rotmat_from_normal,
+    torch_normalize_vector,
+    DCTensorSpec,
+)
 from diffcollision.core.rs1dist import RS1DistCollision, RS1DistConfig
 from diffcollision.core.rs1dir import RS1DirCollision, RS1DirConfig
 from diffcollision.core.rs0 import RS0Collision, RS0Config
@@ -76,30 +81,26 @@ class DCResult:
 
     Attributes
     ----------
-    wp1, wp2 : torch.Tensor, shape (b, p, 3)
-        Witness points in the **world frame** for each mesh pair.
-    normal : torch.Tensor, shape (b, p, 3)
-        Contact normal in the **world frame**, pointing outward from object 1 (even when penetrating).
-    sdf : torch.Tensor, shape (b, p)
+    pos : torch.Tensor, shape (b, p, 2, 3)
+        Witness points in the **world frame**. `pos[:, :, i]` corresponds to
+        `bodyid[:, :, i]`.
+    frame : torch.Tensor, shape (b, p, 3, 3)
+        Contact frame in the **world frame**. The first row is the contact
+        normal pointing outward from object 1 (even when penetrating).
+    dist : torch.Tensor, shape (b, p)
         Signed distance between witness points. Positive if separated, negative if penetrating.
-
-    wp1_o, wp2_o : torch.Tensor, optional
-        Witness points in the **object local frame** of each mesh pair.
-    n1_o, n2_o : torch.Tensor, optional
-        Contact normals in the **object local frame**.
-        `n1_o` points outward from object 1, and `n2_o` points outward from object 2.
+    bodyid : torch.Tensor, shape (b, p, 2)
+        Body ids for each witness point in `pos`.
+    pos_o : torch.Tensor, optional, shape (b, p, 2, 3)
+        Witness points in each corresponding body's **object local frame**.
     """
 
-    wp1: torch.Tensor
-    wp2: torch.Tensor
-    normal: torch.Tensor
-    sdf: torch.Tensor
-    cpidx: torch.Tensor
+    pos: torch.Tensor
+    frame: torch.Tensor
+    dist: torch.Tensor
+    bodyid: torch.Tensor
 
-    wp1_o: torch.Tensor = None
-    wp2_o: torch.Tensor = None
-    n1_o: torch.Tensor = None
-    n2_o: torch.Tensor = None
+    pos_o: torch.Tensor = None
 
 
 class _GradTransportLayer(torch.autograd.Function):
@@ -141,10 +142,10 @@ class DiffCollision:
     ...     meshes, mesh_pairs=[[0, 1]], config=RS1DistConfig()
     ... )
     >>> result = diffcoll.forward(transforms)
-    >>> wp1, wp2 = result.wp1, result.wp2   # witness points on each mesh pair (in world frame)
-    >>> n, sdf = result.normal, result.sdf  # contact normal & signed distance (in world frame)
-    >>> w1_o, w2_o = result.w1_o, result.w2_o   # in object local frame
-    >>> n1_o, n2_o = result.n1_o, result.n2_o   # in object local frame
+    >>> pos = result.pos       # witness points, shape (b, p, 2, 3)
+    >>> normal = result.frame[..., 0, :]  # contact normal in the world frame
+    >>> dist = result.dist     # signed distance
+    >>> pos_o = result.pos_o   # local witness points, shape (b, p, 2, 3)
     """
 
     def __init__(
@@ -293,7 +294,8 @@ class DiffCollision:
                 wp2_all - wp1_all
             )
 
-        sdf_all = d_sign * (wp2_all - wp1_all).norm(dim=-1)
+        dist_all = d_sign * (wp2_all - wp1_all).norm(dim=-1)
+        frame_all = rotmat_from_normal(normal_all)
         if return_local:  # NOTE: use T_egt to ensure correct gradient flow
             all_wp1_o = torch.einsum(
                 "bpji,bpj->bpi", T1_egt[..., :3, :3], wp1_all - T1_egt[..., :3, 3]
@@ -301,45 +303,33 @@ class DiffCollision:
             all_wp2_o = torch.einsum(
                 "bpji,bpj->bpi", T2_egt[..., :3, :3], wp2_all - T2_egt[..., :3, 3]
             )
-            all_n1_o = torch.einsum("bpji,bpj->bpi", T1_egt[..., :3, :3], normal_all)
-            all_n2_o = torch.einsum("bpji,bpj->bpi", T2_egt[..., :3, :3], -normal_all)
 
         # gather valid contacts according to near_mask
         ts = DCTensorSpec(T1.device, T1.dtype)
         n_batch = T1.shape[0]
         slot_idx = ts.to_idx(near_mask.cumsum(dim=1)) - 1
-        take_mask = near_mask & (slot_idx < self.cfg.per_env_max_contact_num)
-        wp1 = ts.to(torch.zeros(n_batch, self.cfg.per_env_max_contact_num, 3))
-        wp2 = ts.to(torch.zeros(n_batch, self.cfg.per_env_max_contact_num, 3))
-        normal = ts.to(torch.zeros(n_batch, self.cfg.per_env_max_contact_num, 3))
-        sdf = ts.to(
-            torch.full((n_batch, self.cfg.per_env_max_contact_num), float("inf"))
-        )
-        cpidx = ts.to_idx(
-            torch.full((n_batch, self.cfg.per_env_max_contact_num, 2), -1)
-        )
+        take_mask = near_mask & (slot_idx < self.cfg.nconmax)
+        pos = ts.to(torch.zeros(n_batch, self.cfg.nconmax, 2, 3))
+        frame = ts.to(torch.zeros(n_batch, self.cfg.nconmax, 3, 3))
+        dist = ts.to(torch.full((n_batch, self.cfg.nconmax), float("inf")))
+        bodyid = ts.to_idx(torch.zeros(n_batch, self.cfg.nconmax, 2))
 
         batch_ids, pair_ids = torch.where(take_mask)
         slot_ids = slot_idx[batch_ids, pair_ids]
-        wp1[batch_ids, slot_ids] = wp1_all[batch_ids, pair_ids]
-        wp2[batch_ids, slot_ids] = wp2_all[batch_ids, pair_ids]
-        normal[batch_ids, slot_ids] = normal_all[batch_ids, pair_ids]
-        sdf[batch_ids, slot_ids] = sdf_all[batch_ids, pair_ids]
-        cpidx[batch_ids, slot_ids] = self.ctx.mesh_pair_ids[pair_ids]
+        pos[batch_ids, slot_ids, 0] = wp1_all[batch_ids, pair_ids]
+        pos[batch_ids, slot_ids, 1] = wp2_all[batch_ids, pair_ids]
+        frame[batch_ids, slot_ids] = frame_all[batch_ids, pair_ids]
+        dist[batch_ids, slot_ids] = dist_all[batch_ids, pair_ids]
+        bodyid[batch_ids, slot_ids] = self.ctx.mesh_pair_ids[pair_ids]
 
         if return_local:
-            wp1_o = ts.to(torch.zeros(n_batch, self.cfg.per_env_max_contact_num, 3))
-            wp2_o = ts.to(torch.zeros(n_batch, self.cfg.per_env_max_contact_num, 3))
-            n1_o = ts.to(torch.zeros(n_batch, self.cfg.per_env_max_contact_num, 3))
-            n2_o = ts.to(torch.zeros(n_batch, self.cfg.per_env_max_contact_num, 3))
-            wp1_o[batch_ids, slot_ids] = all_wp1_o[batch_ids, pair_ids]
-            wp2_o[batch_ids, slot_ids] = all_wp2_o[batch_ids, pair_ids]
-            n1_o[batch_ids, slot_ids] = all_n1_o[batch_ids, pair_ids]
-            n2_o[batch_ids, slot_ids] = all_n2_o[batch_ids, pair_ids]
+            pos_o = ts.to(torch.zeros(n_batch, self.cfg.nconmax, 2, 3))
+            pos_o[batch_ids, slot_ids, 0] = all_wp1_o[batch_ids, pair_ids]
+            pos_o[batch_ids, slot_ids, 1] = all_wp2_o[batch_ids, pair_ids]
         else:
-            wp1_o = wp2_o = n1_o = n2_o = None
+            pos_o = None
 
-        return DCResult(wp1, wp2, normal, sdf, cpidx, wp1_o, wp2_o, n1_o, n2_o)
+        return DCResult(pos, frame, dist, bodyid, pos_o)
 
     def get_debug_dict(self) -> DCDebugDict:
         """

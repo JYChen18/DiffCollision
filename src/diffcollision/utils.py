@@ -417,3 +417,22 @@ def point_to_triangle_distance_and_closest(points, triangles, eps=1e-20):
     closest_points = torch.where(inside.unsqueeze(1), proj, closest_out)
 
     return distances, closest_points
+
+
+def rotmat_from_normal(normal: torch.Tensor) -> torch.Tensor:
+    x_axis = torch.tensor([1, 0, 0], device=normal.device, dtype=normal.dtype)
+    y_axis = torch.tensor([0, 1, 0], device=normal.device, dtype=normal.dtype)
+
+    dot_x, dot_y = normal @ x_axis, normal @ y_axis
+    use_x = (dot_x.abs() < 0.9).int()
+    use_y = 1 - use_x
+
+    row_2_x = x_axis - dot_x.unsqueeze(-1) * normal
+    row_2_y = y_axis - dot_y.unsqueeze(-1) * normal
+    row_2 = row_2_x * use_x.unsqueeze(-1) + row_2_y * use_y.unsqueeze(-1)
+    row_2 = row_2 / row_2.norm(dim=-1, keepdim=True)
+    row_3 = torch.linalg.cross(normal, row_2)
+
+    return torch.cat(
+        (normal.unsqueeze(-2), row_2.unsqueeze(-2), row_3.unsqueeze(-2)), dim=-2
+    )

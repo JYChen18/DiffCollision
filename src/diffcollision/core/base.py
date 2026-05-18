@@ -19,7 +19,7 @@ class BaseCollisionConfig:
     egt: bool = True  # whether to enable equivalent gradient transport
     egt_step_r: float = 1.0  # the relative step between r and t matters
     egt_step_t: float = 0.001  # the relative step between r and t matters
-    per_env_max_contact_num: int = 20
+    nconmax: int = 20
 
 
 @dataclass
@@ -127,8 +127,7 @@ class DCContext:
         else:
             self.mesh_pair_ids = self.ts.to_idx(mesh_pairs)
             assert (
-                len(self.mesh_pair_ids.shape) == 2
-                and self.mesh_pair_ids.shape[-1] == 2
+                len(self.mesh_pair_ids.shape) == 2 and self.mesh_pair_ids.shape[-1] == 2
             ), "mesh_pairs should be a list of tuple of two mesh ids or a tensor of shape (n_pair, 2)"
             mesh_id_to_idx = {
                 int(mesh_id): idx for idx, mesh_id in enumerate(self.mesh_ids.tolist())
@@ -183,9 +182,7 @@ class DCContext:
                 ).repeat_interleave(n_cvx1)
             )
             mp2cp_idx1.append(self.ts.to_idx([i] * n_cvx1).repeat(n_cvx2))
-            mp2cp_idx2.append(
-                self.ts.to_idx([i] * n_cvx2).repeat_interleave(n_cvx1)
-            )
+            mp2cp_idx2.append(self.ts.to_idx([i] * n_cvx2).repeat_interleave(n_cvx1))
         self.ml2mp_idx1 = self.ts.to_idx(self.mesh_pair_indices[..., 0])
         self.ml2mp_idx2 = self.ts.to_idx(self.mesh_pair_indices[..., 1])
         self.cl2cp_idx1 = self.ts.to_idx(torch.cat(cl2cp_idx1))
@@ -281,8 +278,8 @@ class _BaseCollision(torch.autograd.Function):
         cvx_min_idx = ts.to_idx(min_idx_out)
         near_mask = broadphase_mask & (dist < pair_margin)
         cvx_min_idx[~near_mask] = 0
-        if torch.any(near_mask.sum(dim=-1) > cfg.per_env_max_contact_num):
-            logging.warning("Valid contact number exceeds per_env_max_contact_num")
+        if torch.any(near_mask.sum(dim=-1) > cfg.nconmax):
+            logging.warning("Valid contact number exceeds nconmax")
         d_sign = 2 * (dist > 0) - 1
         if dist[near_mask].shape[0] and dist[near_mask].max() > 1:
             logging.warning(f"Distance {dist[near_mask].max()}")

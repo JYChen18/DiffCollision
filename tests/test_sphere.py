@@ -45,18 +45,18 @@ def test_forward(mesh_lst, ts):
 
     diffcoll = DiffCollision(mesh_lst)
     res = diffcoll.forward(T, return_local=False)
-    assert torch.isclose(res.sdf[0, 0], ts.to(0.3))
+    assert torch.isclose(res.dist[0, 0], ts.to(0.3))
     logging.info("Pass forward test")
 
 
 def test_init_scalar_pair_margin_expands_into_context(mesh_lst, ts):
     diffcoll = DiffCollision(
         mesh_lst,
-        config=RS1DistConfig(per_env_max_contact_num=3),
+        config=RS1DistConfig(nconmax=3),
         pair_margin=0.5,
     )
 
-    assert diffcoll.cfg.per_env_max_contact_num == 3
+    assert diffcoll.cfg.nconmax == 3
     assert diffcoll.ctx.pair_margin.shape == (1,)
     assert torch.allclose(diffcoll.ctx.pair_margin, ts.to([0.5]))
 
@@ -88,7 +88,7 @@ def test_adaptive_sampling_requires_target_points(mesh_lst, ts):
 
     res = diffcoll.forward(T, return_local=False)
     with pytest.raises(ValueError, match="target points"):
-        res.wp1.sum().backward()
+        res.pos.sum().backward()
 
 
 def test_nested_collision_config_dispatches_all_methods(mesh_lst):
@@ -126,7 +126,7 @@ def test_backward_easy(mesh_lst, ts):
             T2.grad = None
         T = torch.stack([T1, T2], dim=-3)
         res = diffcoll.forward(T, return_local=False)
-        loss = ((res.wp1 - res.wp2) ** 2).sum()
+        loss = ((res.pos[..., 0, :] - res.pos[..., 1, :]) ** 2).sum()
         loss.backward()
         with torch.no_grad():
             proj2 = torch_matrix_grad_to_se3(T2, T2.grad)
@@ -151,9 +151,7 @@ def test_backward_hard(mesh_lst, ts):
     step_t = 0.1
     diffcoll = DiffCollision(
         mesh_lst,
-        config=RS1DistConfig(
-            enable_debug=True, egt_step_r=step_r, egt_step_t=step_t
-        ),
+        config=RS1DistConfig(enable_debug=True, egt_step_r=step_r, egt_step_t=step_t),
         tp1_o=tp1_o,
         tp2_o=tp2_o,
     )
@@ -164,9 +162,9 @@ def test_backward_hard(mesh_lst, ts):
         T = torch.stack([T1, T2], dim=-3)
         res = diffcoll.forward(T)
         loss = (
-            ((res.wp1[:, 0] - res.wp2[:, 0]) ** 2).sum()
-            + ((tp1_o[:, 0] - res.wp1_o[:, 0]) ** 2).sum()
-            + ((tp2_o[:, 0] - res.wp2_o[:, 0]) ** 2).sum()
+            ((res.pos[:, 0, 0] - res.pos[:, 0, 1]) ** 2).sum()
+            + ((tp1_o[:, 0] - res.pos_o[:, 0, 0]) ** 2).sum()
+            + ((tp2_o[:, 0] - res.pos_o[:, 0, 1]) ** 2).sum()
         )
         loss.backward()
         with torch.no_grad():

@@ -11,7 +11,6 @@ from diffcollision.utils import DCTensorSpec
 from diffcollision import DCMesh, DiffCollision
 from example_config import MainConfig
 
-from util.vis import vis_usd
 from util.rotation import set_seed, torch_normalize_vector, torch_quaternion_to_matrix
 
 
@@ -186,14 +185,14 @@ def main(cfg: MainConfig):
         loss = (
             (
                 (
-                    res.wp1[:, :5]
-                    - res.wp2[:, :5]
-                    + cfg.target_margin * res.normal[:, :5]
+                    res.pos[:, :5, 0]
+                    - res.pos[:, :5, 1]
+                    + cfg.target_margin * res.frame[:, :5, 0]
                 )
                 ** 2
             ).sum()
-            + ((tp1_o[:, :5] - res.wp1_o[:, :5]) ** 2).sum()
-            + ((tp2_o[:, :5] - res.wp2_o[:, :5]) ** 2).sum()
+            + ((tp1_o[:, :5] - res.pos_o[:, :5, 0]) ** 2).sum()
+            + ((tp2_o[:, :5] - res.pos_o[:, :5, 1]) ** 2).sum()
         ) / len(mesh_pairs)
 
         loss.backward()
@@ -225,6 +224,8 @@ def main(cfg: MainConfig):
             )
 
     if cfg.vis:
+        from util.vis import vis_usd
+
         vis_dict = diffcoll.get_debug_dict()
         name2material = {"tp1": "green", "tp2": "green", "wp1": "red", "wp2": "red"}
         for i in range(len(hand_body_name)):
