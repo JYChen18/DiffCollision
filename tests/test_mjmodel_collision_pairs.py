@@ -12,7 +12,7 @@ from diffcollision import (
     RS1DirConfig,
     RS1DistConfig,
 )
-from diffcollision.mjmesh import get_mesh_pair_margins_from_mjmodel
+from diffcollision.mjmesh import get_mesh_pair_params_from_mjmodel
 
 
 def _model(xml: str) -> mujoco.MjModel:
@@ -43,12 +43,19 @@ def _body_pair_ids(model: mujoco.MjModel, name1: str, name2: str) -> tuple[int, 
 def _mesh_pair_margins_from_mjmodel(
     model: mujoco.MjModel,
 ) -> dict[tuple[int, int], float]:
-    mesh_pairs, pair_margins = get_mesh_pair_margins_from_mjmodel(model)
+    mesh_pairs, pair_margins, _ = get_mesh_pair_params_from_mjmodel(model)
     return dict(zip(mesh_pairs, pair_margins))
 
 
+def _mesh_pair_params_from_mjmodel(
+    model: mujoco.MjModel,
+) -> dict[tuple[int, int], tuple[float, float]]:
+    mesh_pairs, pair_margins, pair_gaps = get_mesh_pair_params_from_mjmodel(model)
+    return dict(zip(mesh_pairs, zip(pair_margins, pair_gaps)))
+
+
 def _mesh_pairs_from_mjmodel(model: mujoco.MjModel) -> set[tuple[int, int]]:
-    mesh_pairs, _ = get_mesh_pair_margins_from_mjmodel(model)
+    mesh_pairs, _, _ = get_mesh_pair_params_from_mjmodel(model)
     return set(mesh_pairs)
 
 
@@ -158,6 +165,34 @@ def test_config_from_mjmodel_reads_pair_margin_tensor_from_mujoco_geoms():
 
     assert diffcoll.ctx.pair_margin.shape == (1,)
     assert torch.allclose(diffcoll.ctx.pair_margin, torch.tensor([0.10]))
+    assert diffcoll.ctx.pair_gap.shape == (1,)
+    assert torch.allclose(diffcoll.ctx.pair_gap, torch.tensor([0.0]))
+
+
+def test_config_from_mjmodel_reads_effective_pair_gap_from_mujoco_geoms():
+    model = _model("""
+        <mujoco>
+          <worldbody>
+            <body name="a" pos="-1 0 0">
+              <joint type="free"/>
+              <geom name="ga1" type="box" size=".1 .1 .1" margin=".03" gap=".01"/>
+              <geom name="ga2" type="box" size=".1 .1 .1" margin=".10" gap=".06"/>
+            </body>
+            <body name="b" pos="1 0 0">
+              <joint type="free"/>
+              <geom name="gb" type="box" size=".1 .1 .1" margin=".07" gap=".02"/>
+            </body>
+          </worldbody>
+        </mujoco>
+        """)
+
+    diffcoll = _diffcollision_from_mjmodel(model)
+
+    assert torch.allclose(diffcoll.ctx.pair_margin, torch.tensor([0.17]))
+    assert torch.allclose(diffcoll.ctx.pair_gap, torch.tensor([0.08]))
+    assert torch.allclose(
+        diffcoll.ctx.pair_margin - diffcoll.ctx.pair_gap, torch.tensor([0.09])
+    )
 
 
 def test_diffcollision_config_is_public_and_context_holds_runtime_state():
@@ -231,6 +266,30 @@ def test_explicit_geom_pair_uses_pair_margin():
     pair_margins = _mesh_pair_margins_from_mjmodel(model)
 
     assert pair_margins[_body_pair_ids(model, "a", "b")] == 0.04
+
+
+def test_explicit_geom_pair_uses_pair_gap():
+    model = _model("""
+        <mujoco>
+          <worldbody>
+            <body name="a" pos="-1 0 0">
+              <joint type="free"/>
+              <geom name="ga" type="box" size=".1 .1 .1" margin=".03" gap=".01"/>
+            </body>
+            <body name="b" pos="1 0 0">
+              <joint type="free"/>
+              <geom name="gb" type="box" size=".1 .1 .1" margin=".07" gap=".02"/>
+            </body>
+          </worldbody>
+          <contact>
+            <pair geom1="ga" geom2="gb" margin=".04" gap=".03"/>
+          </contact>
+        </mujoco>
+        """)
+
+    pair_params = _mesh_pair_params_from_mjmodel(model)
+
+    assert pair_params[_body_pair_ids(model, "a", "b")] == (0.04, 0.03)
 
 
 def test_parent_child_body_pairs_are_filtered_by_default():

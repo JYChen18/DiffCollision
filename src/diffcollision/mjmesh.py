@@ -94,25 +94,32 @@ def _geom_pair_is_compatible(model: mujoco.MjModel, geom1: int, geom2: int) -> b
 
 
 def _add_mesh_pair(
-    mesh_pair_margins: dict[tuple[int, int], float],
+    mesh_pair_params: dict[tuple[int, int], tuple[float, float]],
     body1: int,
     body2: int,
     margin: float,
+    gap: float,
 ) -> None:
     if body1 == body2:
         return
     pair = tuple(sorted((int(body1), int(body2))))
-    mesh_pair_margins[pair] = max(mesh_pair_margins.get(pair, 0.0), margin)
+    includemargin = margin - gap
+    prev_margin, prev_includemargin = mesh_pair_params.get(pair, (0.0, float("-inf")))
+    mesh_pair_params[pair] = (
+        max(prev_margin, margin),
+        max(prev_includemargin, includemargin),
+    )
 
 
-def get_mesh_pair_margins_from_mjmodel(model):
-    """Return MuJoCo body-id mesh pairs and matching contact margins.
+def get_mesh_pair_params_from_mjmodel(model):
+    """Return MuJoCo body-id mesh pairs with contact margins and gaps.
 
     DiffCollision stores one collision mesh per MuJoCo body, so this mirrors
     MuJoCo's geom-level contact filtering at body-pair granularity: a body pair
     is kept when at least one geom pair between those bodies can be checked. The
     returned margin is the max effective margin over geom pairs for that body
-    pair, which is conservative for the aggregated body mesh representation.
+    pair, and the returned gap is chosen so ``margin - gap`` is the max effective
+    solver inclusion margin over geom pairs.
     """
     body_to_geoms = {}
     for geom_id in range(model.ngeom):
@@ -125,8 +132,8 @@ def get_mesh_pair_margins_from_mjmodel(model):
 
     body_ids = sorted(body_to_geoms.keys())
     exclude_pairs = set(get_exclude_pairs_from_mjmodel(model))
-    mesh_pair_margins = {}
-    explicit_pair_margins = {}
+    mesh_pair_params = {}
+    explicit_pair_params = {}
     explicit_geom_pairs = {
         tuple(sorted((int(model.pair_geom1[pair_id]), int(model.pair_geom2[pair_id]))))
         for pair_id in range(model.npair)
@@ -157,7 +164,8 @@ def get_mesh_pair_margins_from_mjmodel(model):
                     if not _geom_pair_is_compatible(model, geom1, geom2):
                         continue
                     margin = float(model.geom_margin[geom1] + model.geom_margin[geom2])
-                    _add_mesh_pair(mesh_pair_margins, body1, body2, margin)
+                    gap = float(model.geom_gap[geom1] + model.geom_gap[geom2])
+                    _add_mesh_pair(mesh_pair_params, body1, body2, margin, gap)
 
     for pair_id in range(model.npair):
         geom1 = int(model.pair_geom1[pair_id])
@@ -168,11 +176,19 @@ def get_mesh_pair_margins_from_mjmodel(model):
         name2 = _body_name(model, body2)
         if (name1, name2) not in exclude_pairs:
             _add_mesh_pair(
-                explicit_pair_margins, body1, body2, float(model.pair_margin[pair_id])
+                explicit_pair_params,
+                body1,
+                body2,
+                float(model.pair_margin[pair_id]),
+                float(model.pair_gap[pair_id]),
             )
 
-    for (body1, body2), margin in explicit_pair_margins.items():
-        _add_mesh_pair(mesh_pair_margins, body1, body2, margin)
-    mesh_pairs = list(mesh_pair_margins.keys())
-    pair_margins = [mesh_pair_margins[pair] for pair in mesh_pairs]
-    return mesh_pairs, pair_margins
+    for (body1, body2), (margin, includemargin) in explicit_pair_params.items():
+        _add_mesh_pair(mesh_pair_params, body1, body2, margin, margin - includemargin)
+
+    mesh_pairs = list(mesh_pair_params.keys())
+    pair_margins = [mesh_pair_params[pair][0] for pair in mesh_pairs]
+    pair_gaps = [
+        mesh_pair_params[pair][0] - mesh_pair_params[pair][1] for pair in mesh_pairs
+    ]
+    return mesh_pairs, pair_margins, pair_gaps

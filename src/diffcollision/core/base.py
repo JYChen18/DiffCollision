@@ -29,6 +29,7 @@ class DCContext:
     mesh_pair_ids: torch.Tensor
     mesh_pair_indices: torch.Tensor
     pair_margin: torch.Tensor
+    pair_gap: torch.Tensor
     cvx_lst: list
     sph_lst: torch.Tensor
     ts: DCTensorSpec
@@ -60,6 +61,7 @@ class DCContext:
         mesh_pairs: list[tuple[int, int]] | torch.Tensor,
         mesh_ids: list[int] | torch.Tensor,
         pair_margin: float | list | torch.Tensor = 10.0,
+        pair_gap: float | list | torch.Tensor = 0.0,
         tp1_o: torch.Tensor | None = None,
         tp2_o: torch.Tensor | None = None,
     ):
@@ -95,6 +97,7 @@ class DCContext:
             mesh_pair_ids=ts.to_idx([]),
             mesh_pair_indices=ts.to_idx([]),
             pair_margin=ts.to(0.0),
+            pair_gap=ts.to(0.0),
             cvx_lst=cvx_lst,
             sph_lst=sph_lst,
             ts=ts,
@@ -108,7 +111,13 @@ class DCContext:
             mp2cp_idx2=ts.to_idx([]),
             cp2mp_idx=ts.to_idx([]),
         )
-        dc_ctx.configure_mesh_pairs(mesh_pairs, pair_margin, tp1_o, tp2_o)
+        dc_ctx.configure_mesh_pairs(
+            mesh_pairs,
+            pair_margin,
+            tp1_o,
+            tp2_o,
+            pair_gap=pair_gap,
+        )
         return dc_ctx
 
     def configure_mesh_pairs(
@@ -117,6 +126,7 @@ class DCContext:
         pair_margin: float | list | torch.Tensor = 10.0,
         tp1_o: torch.Tensor | None = None,
         tp2_o: torch.Tensor | None = None,
+        pair_gap: float | list | torch.Tensor = 0.0,
     ):
         n_mesh = len(self.meshes)
         if mesh_pairs is None:
@@ -146,6 +156,14 @@ class DCContext:
             self.mesh_pair_ids.shape[0],
         ), "pair_margin should be a scalar or a tensor with one value for each mesh pair"
         self.pair_margin = pair_margin
+
+        pair_gap = self.ts.to(pair_gap).reshape(-1)
+        if pair_gap.shape[0] == 1:
+            pair_gap = pair_gap.expand(self.mesh_pair_ids.shape[0]).clone()
+        assert pair_gap.shape == (
+            self.mesh_pair_ids.shape[0],
+        ), "pair_gap should be a scalar or a tensor with one value for each mesh pair"
+        self.pair_gap = pair_gap
 
         if (tp1_o is None) != (tp2_o is None):
             raise ValueError("tp1_o and tp2_o should both be provided or both be None")

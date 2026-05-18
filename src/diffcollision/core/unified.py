@@ -19,7 +19,7 @@ from diffcollision.core.analytical import AnalyticalCollision, AnalyticalConfig
 from diffcollision.io import DCMesh
 from diffcollision.mjmesh import (
     get_mesh_from_mjmodel,
-    get_mesh_pair_margins_from_mjmodel,
+    get_mesh_pair_params_from_mjmodel,
 )
 from diffcollision.core.base import DCContext
 
@@ -169,6 +169,7 @@ class DiffCollision:
         mesh_pairs: list[tuple[int, int]] | torch.Tensor = None,
         mesh_ids: list[int] | torch.Tensor = None,
         pair_margin: float | list | torch.Tensor = 10.0,
+        pair_gap: float | list | torch.Tensor = 0.0,
         tp1_o: torch.Tensor | None = None,
         tp2_o: torch.Tensor | None = None,
         config: DiffCollisionConfig = RS1DirConfig(),
@@ -190,6 +191,9 @@ class DiffCollision:
             Collision method config. Defaults to `RS1DirConfig()`.
         pair_margin : float, list, or torch.Tensor, optional
             Contact detection distance threshold. May be a scalar or one value per mesh pair.
+        pair_gap : float, list, or torch.Tensor, optional
+            Distance between detection margin and solver inclusion margin. May
+            be a scalar or one value per mesh pair.
         tp1_o, tp2_o : torch.Tensor, optional
             Target points in object-local frame, with shape `(batch, n_pair, 3)`.
             Required when using adaptive sampling.
@@ -199,12 +203,7 @@ class DiffCollision:
         self.cfg = config
 
         self.ctx = DCContext.from_meshes(
-            meshes,
-            mesh_pairs,
-            mesh_ids,
-            pair_margin,
-            tp1_o,
-            tp2_o,
+            meshes, mesh_pairs, mesh_ids, pair_margin, pair_gap, tp1_o, tp2_o
         )
 
         self.func_cls = config.method
@@ -222,14 +221,18 @@ class DiffCollision:
         if mj_model is not None:
             ts = DCTensorSpec(device, dtype)
             mesh_ids, meshes = get_mesh_from_mjmodel(mj_model, ts)
-            mesh_pairs, pair_margins = get_mesh_pair_margins_from_mjmodel(mj_model)
+            mesh_pairs, pair_margins, pair_gaps = get_mesh_pair_params_from_mjmodel(
+                mj_model
+            )
             pair_margins = ts.to(pair_margins)
+            pair_gaps = ts.to(pair_gaps)
 
         return cls(
             meshes=meshes,
             mesh_pairs=mesh_pairs,
             mesh_ids=mesh_ids,
             pair_margin=pair_margins,
+            pair_gap=pair_gaps,
             config=config,
         )
 
