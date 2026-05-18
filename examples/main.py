@@ -1,9 +1,10 @@
 import torch
 import numpy as np
-import logging
 import os
+import sys
 import traceback
 from dataclasses import replace
+from loguru import logger
 
 from util.rotation import (
     set_seed,
@@ -78,7 +79,7 @@ def single_problem(prob_id, cfg):
             )
             read_flag = False
         except:
-            logging.info(
+            logger.info(
                 f"Loading error: \n Asset folder: {cfg.asset_dir} \n Object IDs: {obj_id[0]} {obj_id[1]} \n {traceback.format_exc()}"
             )
         PROB_RAND_STATE = np.random.get_state()
@@ -172,12 +173,12 @@ def single_problem(prob_id, cfg):
         Err_Med = torch.quantile(final_loss, 0.5)
         Err_D9 = torch.quantile(final_loss, 0.9, interpolation="nearest")
         acc6_sum = (final_loss < 1e-6).sum() / b
-        logging.info(f"Problem: {prob_id}")
-        logging.info(f"Object: {obj_id[0]},{obj_id[1]}")
-        logging.info(f"Scale: {scale[0]},{scale[1]}")
-        logging.info(f"Convex: {convex[0]},{convex[1]}")
-        logging.info(f"Tp: {tp_type[0]},{tp_type[1]}")
-        logging.info(
+        logger.info(f"Problem: {prob_id}")
+        logger.info(f"Object: {obj_id[0]},{obj_id[1]}")
+        logger.info(f"Scale: {scale[0]},{scale[1]}")
+        logger.info(f"Convex: {convex[0]},{convex[1]}")
+        logger.info(f"Tp: {tp_type[0]},{tp_type[1]}")
+        logger.info(
             f"ErrD5: {Err_Med:.1e}, ErrD9: {Err_D9:.1e}, Acc: {acc6_sum*100:.1f}%"
         )
 
@@ -211,13 +212,15 @@ def main(cfg: MainConfig):
         Err_Med = torch.quantile(total_loss, 0.5)
         Err_D9 = torch.quantile(total_loss, 0.9, interpolation="nearest")
         Acc6 = (total_loss < 1e-6).sum() / len(total_loss)
-        logging.info(
+        logger.info(
             f"(ALL) ErrD5: {Err_Med:.1e}, ErrD9: {Err_D9:.1e}, Acc: {Acc6*100:.1f}%"
         )
     except Exception as e:
-        logging.error(f"{traceback.format_exc()}")
+        logger.error(f"{traceback.format_exc()}")
     return
 
 
 if __name__ == "__main__":
-    main(MainConfig.from_yaml("examples/config/base.yaml").cli())
+    cfg = MainConfig.from_yaml("examples/config/base.yaml").cli()
+    cfg.prepare_experiment(sys.argv[1:])
+    main(cfg)

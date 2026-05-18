@@ -2,8 +2,9 @@ import numpy as np
 import trimesh
 import os
 import mujoco
-import logging
+import sys
 from dataclasses import replace
+from loguru import logger
 
 import torch
 import pytorch_kinematics as pk
@@ -197,7 +198,7 @@ def main(cfg: MainConfig):
 
         loss.backward()
         if i % 100 == 0:
-            logging.info(f"Iteration: {i}, Avg loss: {float(loss)}")
+            logger.info(f"Iteration: {i}, Avg loss: {float(loss)}")
         if i > 0.8 * cfg.iter:
             step = 0.01
         elif i > 0.5 * cfg.iter:
@@ -240,4 +241,6 @@ def main(cfg: MainConfig):
 
 
 if __name__ == "__main__":
-    main(MainConfig.from_yaml("examples/config/base.yaml").cli())
+    cfg = MainConfig.from_yaml("examples/config/base.yaml").cli()
+    cfg.prepare_experiment(sys.argv[1:])
+    main(cfg)

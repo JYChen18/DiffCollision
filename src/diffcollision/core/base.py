@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import torch
 import numpy as np
-import logging
+from loguru import logger
 
 from diffcollision.cpp._coal_openmp import batched_coal_distance
 from diffcollision.wp_utils import _WarpSphereDist
@@ -297,10 +297,10 @@ class _BaseCollision(torch.autograd.Function):
         near_mask = broadphase_mask & (dist < pair_margin)
         cvx_min_idx[~near_mask] = 0
         if torch.any(near_mask.sum(dim=-1) > cfg.nconmax):
-            logging.warning("Valid contact number exceeds nconmax")
+            logger.warning(
+                f"Valid contact number {near_mask.sum(dim=-1).max()} exceeds nconmax {cfg.nconmax}. Consider increasing nconmax in the config."
+            )
         d_sign = 2 * (dist > 0) - 1
-        if dist[near_mask].shape[0] and dist[near_mask].max() > 1:
-            logging.warning(f"Distance {dist[near_mask].max()}")
 
         ctx.cfg = cfg
         ctx.dc_ctx = dc_ctx

@@ -1,13 +1,12 @@
 # Standard Library
 from dataclasses import dataclass
 import os
-import sys
-import logging
 
 # Third Party
 import numpy as np
 import trimesh
 import torch
+from loguru import logger
 
 from .rotation import torch_matrix_to_quaternion
 from diffcollision import DCDebugDict
@@ -254,5 +253,5 @@ def vis_usd(
                 pose_lst.append(torch.cat([val[:, i, j], help2], dim=-1).tolist())
         usd_stage.add_mesh_lst(mesh_lst, name_lst, pose_lst, time_lst, material_lst)
         usd_stage.write_stage_to_file(save_path)
-    logging.info(f"Saved USD to folder {os.path.abspath(save_folder)}")
+    logger.info(f"Saved USD to folder {os.path.abspath(save_folder)}")
     return

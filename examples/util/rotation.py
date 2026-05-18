@@ -2,16 +2,8 @@ import numpy as np
 import torch
 import random
 import logging
-import sys
 
 logging.getLogger("trimesh").setLevel(logging.ERROR)
-root_logger = logging.getLogger()
-if not root_logger.handlers:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="[%(asctime)s][%(name)s][%(levelname)s] - %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)],
-    )
 
 from diffcollision import DCMesh, DiffCollision, DCTensorSpec
 from diffcollision.utils import global_sample_v_or_f

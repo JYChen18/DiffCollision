@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import torch
 import numpy as np
 import trimesh
-import logging
+from loguru import logger
 
 
 @dataclass
@@ -277,12 +277,12 @@ def local_sample_w_dthre(
     # If buggy batches found, re-sample with adjusted threshold
     buggy_idx = torch.where(valid.sum(dim=-1) < max(int(n_local // 4), 2))[0]
     if len(buggy_idx) > 0:
-        logging.warning(
+        logger.warning(
             f"Found {len(buggy_idx)} batches (out of {valid.shape[0]}) with insufficient local samples. "
         )
         global _local_sample_warn_once
         if not _local_sample_warn_once:
-            logging.warning(
+            logger.warning(
                 "If this appears frequently across meshes, consider increasing `dthre` or `n_global` in the config. "
                 "If only for specific meshes with very few batches, those meshes may be problematic (e.g., containing disconnected pieces)."
             )
