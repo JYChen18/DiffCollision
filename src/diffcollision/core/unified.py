@@ -102,6 +102,21 @@ class DCResult:
 
     pos_o: torch.Tensor = None
 
+    @classmethod
+    def empty(
+        cls,
+        nworld: int,
+        nconmax: int,
+        ts: DCTensorSpec = DCTensorSpec(),
+        include_pos_o: bool = True,
+    ) -> "DCResult":
+        pos = ts.to(torch.zeros(nworld, nconmax, 2, 3))
+        frame = ts.to(torch.zeros(nworld, nconmax, 3, 3))
+        dist = ts.to(torch.full((nworld, nconmax), float("inf")))
+        bodyid = ts.to_idx(torch.zeros(nworld, nconmax, 2))
+        pos_o = ts.to(torch.zeros(nworld, nconmax, 2, 3)) if include_pos_o else None
+        return cls(pos, frame, dist, bodyid, pos_o)
+
 
 class _GradTransportLayer(torch.autograd.Function):
     @staticmethod
