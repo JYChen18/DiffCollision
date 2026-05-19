@@ -100,15 +100,7 @@ def _prepare_for_backward(cfg: RS1DistConfig, dc_ctx: DCContext, batch):
 
 
 def _local_sample(
-    cfg: RS1DistConfig,
-    dc_ctx: DCContext,
-    T1,
-    T2,
-    wp1,
-    wp2,
-    normal,
-    batch,
-    cvx_min_idx=None,
+    cfg: RS1DistConfig, dc_ctx: DCContext, T1, T2, wp1, wp2, normal, batch, cvx_min_idx
 ):
     if cfg.sample == "adp" or cfg.sample == "fix":
         if dc_ctx.gs_o_pair is None:
@@ -120,12 +112,15 @@ def _local_sample(
         T = torch.stack([T1, T2], dim=-3).reshape(-1, 4, 4)
         wp = torch.stack([wp1, wp2], dim=-2).reshape(-1, 3)
         nn = torch.stack([normal, -normal], dim=-2).reshape(-1, 3)
-        gs_o[:, -1, :3] = torch.einsum("bji,bj->bi", T[:, :3, :3], wp - T[:, :3, 3])
-        gs_o[:, -1, 3:] = torch.einsum("bji,bj->bi", T[:, :3, :3], nn)
+        witness_o = torch.empty_like(gs_o[:, -1:])
+        witness_o[:, -1, :3] = torch.einsum(
+            "bji,bj->bi", T[:, :3, :3], wp - T[:, :3, 3]
+        )
+        witness_o[:, -1, 3:] = torch.einsum("bji,bj->bi", T[:, :3, :3], nn)
 
         # Local sampling around current witness points
         ls_o = local_sample_w_dthre(
-            gs_o, tp_o, dthre, min_dthre, cfg.nthre, n_local, cfg.sample
+            gs_o, tp_o, witness_o, dthre, min_dthre, cfg.nthre, n_local, cfg.sample
         )
         ls_o = ls_o.reshape(-1, 2, n_local, 6)
     elif cfg.sample == "nbr":

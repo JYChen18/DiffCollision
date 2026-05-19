@@ -248,20 +248,22 @@ _local_sample_warn_once = False
 def local_sample_w_dthre(
     global_sample: torch.Tensor,
     target_point: torch.Tensor,
+    witness_sample: torch.Tensor,
     dist_thre: float,
     min_thre: float,
     normal_thre: float,
     n_local: int,
     sample_strategy: str,
 ):
-    dist = (global_sample[..., :3] - global_sample[:, -1:, :3]).norm(dim=-1)  # b, s
-    dot_prod = (global_sample[..., 3:] * global_sample[:, -1:, 3:]).sum(dim=-1)
+    all_sample = torch.cat([global_sample, witness_sample], dim=-2)
+    dist = (all_sample[..., :3] - witness_sample[..., :3]).norm(dim=-1)  # b, s
+    dot_prod = (all_sample[..., 3:] * witness_sample[..., 3:]).sum(dim=-1)
     angle = torch.arccos(torch.clamp(dot_prod, min=-1.0, max=1.0))
 
     # NOTE: the current local sampling is not suitable for complex curvatures.
     # Geodesic distance might be better (at the cost of speed?)
     if sample_strategy == "adp":
-        dist2 = (global_sample[:, -1, :3] - target_point).norm(dim=-1)  # b
+        dist2 = (witness_sample[:, 0, :3] - target_point).norm(dim=-1)  # b
         valid = (dist < torch.maximum(2 * dist2, min_thre).unsqueeze(-1)) & (
             angle < normal_thre
         )
@@ -296,7 +298,7 @@ def local_sample_w_dthre(
     # NOTE: replacement=False may get samples with prob=0
     sampled_idx = torch.multinomial(probs, n_local, replacement=True)
     sampled_padded = sampled_idx.unsqueeze(-1).expand(-1, -1, 6)
-    return global_sample.gather(1, sampled_padded)
+    return all_sample.gather(1, sampled_padded)
 
 
 def global_sample_v_and_f(
