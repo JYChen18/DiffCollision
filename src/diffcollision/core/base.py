@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 import torch
 import numpy as np
-from loguru import logger
 
 from diffcollision.cpp._coal_openmp import batched_coal_distance
 from diffcollision.wp_utils import _WarpSphereDist
@@ -296,24 +295,65 @@ class _BaseCollision(torch.autograd.Function):
         cvx_min_idx = ts.to_idx(min_idx_out)
         near_mask = broadphase_mask & (dist < pair_margin)
         cvx_min_idx[~near_mask] = 0
-        if torch.any(near_mask.sum(dim=-1) > cfg.nconmax):
-            logger.warning(
-                f"Valid contact number {near_mask.sum(dim=-1).max()} exceeds nconmax {cfg.nconmax}. Consider increasing nconmax in the config."
-            )
+        contact_counts = near_mask.sum(dim=-1)
         d_sign = 2 * (dist > 0) - 1
 
         ctx.cfg = cfg
         ctx.dc_ctx = dc_ctx
         ctx.vis = vis
-        ctx.cvx_min_idx = cvx_min_idx
-        ctx.near_mask = ts.to_idx(near_mask)
-        ctx.save_for_backward(T1, T2, dist, normal, wp1, wp2)
-        return wp1, wp2, normal, d_sign, near_mask
+
+        coll = torch.where(near_mask.reshape(-1))[0]
+        wp1_flat, wp2_flat = wp1.reshape(-1, 3)[coll], wp2.reshape(-1, 3)[coll]
+        normal_flat = normal.reshape(-1, 3)[coll]
+        d_sign_flat = d_sign.reshape(-1)[coll]
+        cvx_min_idx_flat = cvx_min_idx.reshape(-1)[coll]
+
+        ctx.save_for_backward(
+            T1, T2, normal_flat, wp1_flat, wp2_flat, d_sign_flat, cvx_min_idx_flat, coll
+        )
+        return wp1_flat, wp2_flat, normal_flat, d_sign_flat, coll, contact_counts
 
     @staticmethod
-    def pre_backward_logic(ctx, grad_wp1, grad_wp2, grad_n):
-        near_mask = ctx.near_mask.unsqueeze(-1)
-        grad_wp1 = grad_wp1 * near_mask
-        grad_wp2 = grad_wp2 * near_mask
-        grad_n = grad_n * near_mask
-        return grad_wp1, grad_wp2, grad_n
+    def unpack_saved_tensors(ctx, grad_wp1=None, grad_wp2=None, grad_n=None):
+        T1_raw, T2_raw, normal, wp1, wp2, d_sign, cvx_min_idx, coll = ctx.saved_tensors
+        b, p = T1_raw.shape[:2]
+        n_contact = wp1.shape[0]
+        if grad_wp1 is None:
+            grad_wp1 = torch.zeros_like(wp1)
+        if grad_wp2 is None:
+            grad_wp2 = torch.zeros_like(wp2)
+        if grad_n is None:
+            grad_n = torch.zeros_like(normal)
+        T1 = T1_raw.reshape(b * p, 4, 4)[coll]
+        T2 = T2_raw.reshape(b * p, 4, 4)[coll]
+        return (
+            T1_raw,
+            T2_raw,
+            T1,
+            T2,
+            normal,
+            wp1,
+            wp2,
+            d_sign,
+            cvx_min_idx,
+            coll,
+            grad_wp1,
+            grad_wp2,
+            grad_n,
+            b,
+            p,
+            n_contact,
+        )
+
+    @staticmethod
+    def zero_grads(T1_raw, T2_raw):
+        return torch.zeros_like(T1_raw), torch.zeros_like(T2_raw), None, None, None
+
+    @staticmethod
+    def scatter_grads(T1_raw, T2_raw, coll, grad1, grad2):
+        b, p = T1_raw.shape[:2]
+        grad1_flat = torch.zeros(b * p, 4, 4, device=T1_raw.device, dtype=T1_raw.dtype)
+        grad2_flat = torch.zeros_like(grad1_flat)
+        grad1_flat.index_add_(0, coll, grad1)
+        grad2_flat.index_add_(0, coll, grad2)
+        return grad1_flat.view_as(T1_raw), grad2_flat.view_as(T2_raw), None, None, None

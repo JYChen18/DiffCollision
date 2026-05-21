@@ -39,11 +39,35 @@ class FDConfig(BaseCollisionConfig):
 
 class FDCollision(_BaseCollision):
     @staticmethod
-    def backward(ctx, grad_wp1, grad_wp2, grad_n, grad_d_sign, grad_mask):
-        grad_wp1, grad_wp2, grad_n = _BaseCollision.pre_backward_logic(
-            ctx, grad_wp1, grad_wp2, grad_n
-        )
-        T1, T2, _, _, _, _ = ctx.saved_tensors  # batched
+    def backward(
+        ctx, grad_wp1, grad_wp2, grad_n, grad_d_sign, grad_coll, grad_contact_counts
+    ):
+        (
+            T1,
+            T2,
+            _T1_contact,
+            _T2_contact,
+            _normal,
+            _wp1,
+            _wp2,
+            _d_sign,
+            _cvx_min_idx,
+            coll,
+            grad_wp1,
+            grad_wp2,
+            _grad_n,
+            b,
+            p,
+            n_contact,
+        ) = _BaseCollision.unpack_saved_tensors(ctx, grad_wp1, grad_wp2, grad_n)
+        if n_contact == 0:
+            return _BaseCollision.zero_grads(T1, T2)
+        grad_wp1_dense = torch.zeros(b * p, 3, device=T1.device, dtype=T1.dtype)
+        grad_wp2_dense = torch.zeros_like(grad_wp1_dense)
+        grad_wp1_dense.index_add_(0, coll, grad_wp1)
+        grad_wp2_dense.index_add_(0, coll, grad_wp2)
+        grad_wp1 = grad_wp1_dense.view(b, p, 3)
+        grad_wp2 = grad_wp2_dense.view(b, p, 3)
         cfg: FDConfig = ctx.cfg
         dc_ctx: DCContext = ctx.dc_ctx
         eps_r, eps_t, ts = cfg.eps_r, cfg.eps_t, dc_ctx.ts

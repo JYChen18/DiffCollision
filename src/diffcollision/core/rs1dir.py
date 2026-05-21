@@ -53,30 +53,57 @@ class RS1DirConfig(RS1DistConfig):
 
 class RS1DirCollision(_BaseCollision):
     @staticmethod
-    def backward(ctx, grad_wp1, grad_wp2, grad_n, grad_d_sign, grad_mask):
-        grad_wp1, grad_wp2, grad_n = _BaseCollision.pre_backward_logic(
-            ctx, grad_wp1, grad_wp2, grad_n
-        )
-        T1_raw, T2_raw, dist_raw, normal_raw, wp1_raw, wp2_raw = ctx.saved_tensors
-        b, p = T1_raw.shape[:2]
-        T1, T2 = T1_raw.view(b * p, 4, 4), T2_raw.view(b * p, 4, 4)
-        wp1, wp2 = wp1_raw.view(b * p, 3), wp2_raw.view(b * p, 3)
-        dist, normal = dist_raw.view(b * p), normal_raw.view(b * p, 3)
-        d_sign = (dist > 0).int() * 2 - 1
+    def backward(
+        ctx, grad_wp1, grad_wp2, grad_n, grad_d_sign, grad_coll, grad_contact_counts
+    ):
+        (
+            T1_raw,
+            T2_raw,
+            T1,
+            T2,
+            normal,
+            wp1,
+            wp2,
+            d_sign,
+            cvx_min_idx,
+            coll,
+            grad_wp1,
+            grad_wp2,
+            _grad_n,
+            b,
+            p,
+            n_contact,
+        ) = _BaseCollision.unpack_saved_tensors(ctx, grad_wp1, grad_wp2, grad_n)
+        if n_contact == 0:
+            return _BaseCollision.zero_grads(T1_raw, T2_raw)
+
         y = d_sign.unsqueeze(1) * (wp1 - wp2)
         cfg: RS1DirConfig = ctx.cfg
         dc_ctx: DCContext = ctx.dc_ctx
 
         with torch.no_grad():
             ls1_o, ls2_o = _local_sample(
-                cfg, dc_ctx, T1, T2, wp1, wp2, normal, b, ctx.cvx_min_idx
+                cfg, dc_ctx, T1, T2, wp1, wp2, normal, b, cvx_min_idx, coll, p
             )
             ls1_o, ls2_o = ls1_o[..., :3], ls2_o[..., :3]
             if ctx.vis is not None:
                 ls1 = ls1_o @ T1[:, :3, :3].transpose(-1, -2) + T1[:, None, :3, 3]
                 ls2 = ls2_o @ T2[:, :3, :3].transpose(-1, -2) + T2[:, None, :3, 3]
-                ctx.vis.ls1.append(ls1.detach().cpu())
-                ctx.vis.ls2.append(ls2.detach().cpu())
+                batch_ids = coll // p
+                counts = torch.bincount(batch_ids, minlength=b)
+                offsets = counts.cumsum(dim=0) - counts
+                slot_ids = torch.arange(
+                    n_contact, device=coll.device
+                ) - torch.repeat_interleave(offsets, counts)
+                take_mask = slot_ids < cfg.nconmax
+                ls1_vis = torch.zeros(
+                    b, cfg.nconmax, cfg.n_local, 3, device=T1.device, dtype=T1.dtype
+                )
+                ls2_vis = torch.zeros_like(ls1_vis)
+                ls1_vis[batch_ids[take_mask], slot_ids[take_mask]] = ls1[take_mask]
+                ls2_vis[batch_ids[take_mask], slot_ids[take_mask]] = ls2[take_mask]
+                ctx.vis.ls1.append(ls1_vis.detach().cpu())
+                ctx.vis.ls2.append(ls2_vis.detach().cpu())
 
         def partial_sigma_x(points, x):
             z = points @ x
@@ -99,25 +126,24 @@ class RS1DirCollision(_BaseCollision):
         jacb_fun2 = torch.vmap(torch.func.jacrev(wp2_func, argnums=(0, 1)))
         Jp_wp2_y, Jp_wp2_T2 = jacb_fun2(y, T2, ls2_o)
 
-        Idi = torch.eye(3, device=T1.device, dtype=T1.dtype)  # (3,3)
-        Id = Idi.unsqueeze(0).expand(b * p, -1, -1)
-        J_f_y = Id + d_sign[:, None, None] * (Jp_wp2_y - Jp_wp1_y)  # Eq.(19)
-        J_f_T1 = -d_sign[:, None, None] * Jp_wp1_T1.view(b * p, 3, -1)
-        J_f_T2 = d_sign[:, None, None] * Jp_wp2_T2.view(b * p, 3, -1)
+        Idi = torch.eye(3, device=T1.device, dtype=T1.dtype)
+        Id = Idi.unsqueeze(0).expand(n_contact, -1, -1)
+        J_f_y = Id + d_sign[:, None, None] * (Jp_wp2_y - Jp_wp1_y)
+        J_f_T1 = -d_sign[:, None, None] * Jp_wp1_T1.view(n_contact, 3, -1)
+        J_f_T2 = d_sign[:, None, None] * Jp_wp2_T2.view(n_contact, 3, -1)
 
-        # Implicit function differentiation. X = torch.linalg.solve(A, B) satisfies AX=B
-        J_y_T1 = torch.linalg.solve(J_f_y, -J_f_T1).view(b * p, 3, 4, 4)
-        J_y_T2 = torch.linalg.solve(J_f_y, -J_f_T2).view(b * p, 3, 4, 4)
+        J_y_T1 = torch.linalg.solve(J_f_y, -J_f_T1).view(n_contact, 3, 4, 4)
+        J_y_T2 = torch.linalg.solve(J_f_y, -J_f_T2).view(n_contact, 3, 4, 4)
 
         J_wp1_T1 = Jp_wp1_T1 + torch.einsum("bij, bjkl -> bikl", Jp_wp1_y, J_y_T1)
         J_wp1_T2 = torch.einsum("bij, bjkl -> bikl", Jp_wp1_y, J_y_T2)
         J_wp2_T1 = torch.einsum("bij, bjkl -> bikl", Jp_wp2_y, J_y_T1)
         J_wp2_T2 = Jp_wp2_T2 + torch.einsum("bij, bjkl -> bikl", Jp_wp2_y, J_y_T2)
 
-        grad1 = torch.einsum(
-            "bpijk, bpi -> bpjk", J_wp1_T1.view(b, p, 3, 4, 4), grad_wp1
-        ) + torch.einsum("bpijk, bpi -> bpjk", J_wp2_T1.view(b, p, 3, 4, 4), grad_wp2)
-        grad2 = torch.einsum(
-            "bpijk, bpi -> bpjk", J_wp2_T2.view(b, p, 3, 4, 4), grad_wp2
-        ) + torch.einsum("bpijk, bpi -> bpjk", J_wp1_T2.view(b, p, 3, 4, 4), grad_wp1)
-        return grad1, grad2, None, None, None
+        grad1 = torch.einsum("cijk, ci -> cjk", J_wp1_T1, grad_wp1) + torch.einsum(
+            "cijk, ci -> cjk", J_wp2_T1, grad_wp2
+        )
+        grad2 = torch.einsum("cijk, ci -> cjk", J_wp2_T2, grad_wp2) + torch.einsum(
+            "cijk, ci -> cjk", J_wp1_T2, grad_wp1
+        )
+        return _BaseCollision.scatter_grads(T1_raw, T2_raw, coll, grad1, grad2)
