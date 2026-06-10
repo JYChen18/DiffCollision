@@ -154,7 +154,6 @@ class DCContext:
         assert pair_margin.shape == (
             self.mesh_pair_ids.shape[0],
         ), "pair_margin should be a scalar or a tensor with one value for each mesh pair"
-        self.pair_margin = pair_margin
 
         pair_gap = self.ts.to(pair_gap).reshape(-1)
         if pair_gap.shape[0] == 1:
@@ -162,6 +161,11 @@ class DCContext:
         assert pair_gap.shape == (
             self.mesh_pair_ids.shape[0],
         ), "pair_gap should be a scalar or a tensor with one value for each mesh pair"
+        if torch.any(pair_gap < 0):
+            raise ValueError("pair_gap must be non-negative")
+        if torch.any(pair_margin + pair_gap < 0):
+            raise ValueError("pair_margin + pair_gap must be non-negative")
+        self.pair_margin = pair_margin
         self.pair_gap = pair_gap
 
         if (tp1_o is None) != (tp2_o is None):
@@ -226,7 +230,9 @@ class _BaseCollision(torch.autograd.Function):
     ):
         cvx_lst, sph_lst, ts = dc_ctx.cvx_lst, dc_ctx.sph_lst, dc_ctx.ts
         n_batch, n_mesh_pair = T2.shape[:2]  # b, p
-        pair_margin = dc_ctx.pair_margin.view(1, n_mesh_pair)
+        pair_detection_margin = (dc_ctx.pair_margin + dc_ctx.pair_gap).view(
+            1, n_mesh_pair
+        )
         batched_pair_idx = dc_ctx.cp2mp_idx.expand(n_batch, -1)  # (b, k)
 
         # Broad-phase filter
@@ -253,7 +259,7 @@ class _BaseCollision(torch.autograd.Function):
         )  # (b, p)
 
         # prune convex-piece-pairs if they belong to faraway mesh-pairs
-        broadphase_mask = s2s_min_sct < pair_margin  # (b, p)
+        broadphase_mask = s2s_min_sct < pair_detection_margin  # (b, p)
         near_cp_mask = broadphase_mask.gather(1, batched_pair_idx)  # (b, k)
 
         # prune convex-piece-pair if min >= max_sct
@@ -293,7 +299,7 @@ class _BaseCollision(torch.autograd.Function):
         dist, normal = ts.to(dist_out), ts.to(normal_out)
         wp1, wp2 = ts.to(wp1_out), ts.to(wp2_out)
         cvx_min_idx = ts.to_idx(min_idx_out)
-        near_mask = broadphase_mask & (dist < pair_margin)
+        near_mask = broadphase_mask & (dist < pair_detection_margin)
         cvx_min_idx[~near_mask] = 0
         contact_counts = near_mask.sum(dim=-1)
         d_sign = 2 * (dist > 0) - 1

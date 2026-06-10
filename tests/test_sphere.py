@@ -72,6 +72,24 @@ def test_init_pair_margin_stays_pair_aligned(mesh_lst, ts):
     assert torch.allclose(diffcoll.ctx.pair_margin, ts.to([0.2, 0.3]))
 
 
+def test_pair_gap_extends_detection_buffer(mesh_lst, ts):
+    T = ts.to(torch.eye(4)[None, None].repeat(1, 2, 1, 1))
+    T[:, 1, 0, 3] = 0.25
+
+    diffcoll = DiffCollision(
+        mesh_lst,
+        pair_margin=0.0,
+        pair_gap=0.1,
+    )
+
+    res = diffcoll.forward(T, return_local=False)
+
+    assert torch.allclose(diffcoll.ctx.pair_margin, ts.to([0.0]))
+    assert torch.allclose(diffcoll.ctx.pair_gap, ts.to([0.1]))
+    assert torch.isclose(res.dist[0, 0], ts.to(0.05), atol=1e-6)
+    assert torch.isinf(res.dist[0, 1:]).all()
+
+
 def test_target_points_validate_pair_shape(mesh_lst, ts):
     tp1_o = ts.to([[[0, 0.1, 0], [0.1, 0, 0]]])
     tp2_o = ts.to([[[0.1, 0, 0], [0, 0.1, 0]]])

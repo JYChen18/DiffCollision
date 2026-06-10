@@ -189,12 +189,16 @@ class DiffCollision:
             Public ids for `meshes`. Defaults to compact indices, or to MuJoCo
             body ids when `mj_model` is supplied.
         config : DiffCollisionConfig, optional
-            Collision method config. Defaults to `RS1DirConfig()`.
+            Collision method config. Defaults to `RS1DistConfig()`.
         pair_margin : float, list, or torch.Tensor, optional
-            Contact detection distance threshold. May be a scalar or one value per mesh pair.
+            MuJoCo-style contact margin/force threshold. DiffCollision stores
+            this value separately from ``pair_gap``; downstream force solvers
+            can treat contacts with distance less than ``pair_margin`` as
+            force-active.
         pair_gap : float, list, or torch.Tensor, optional
-            Distance between detection margin and solver inclusion margin. May
-            be a scalar or one value per mesh pair.
+            Additional detection/reporting buffer beyond ``pair_margin``.
+            DiffCollision reports contacts whose distance is less than
+            ``pair_margin + pair_gap``.
         tp1_o, tp2_o : torch.Tensor, optional
             Target points in object-local frame, with shape `(batch, n_pair, 3)`.
             Required when using adaptive sampling.

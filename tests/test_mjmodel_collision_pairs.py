@@ -169,7 +169,7 @@ def test_config_from_mjmodel_reads_pair_margin_tensor_from_mujoco_geoms():
     assert torch.allclose(diffcoll.ctx.pair_gap, torch.tensor([0.0]))
 
 
-def test_config_from_mjmodel_reads_effective_pair_gap_from_mujoco_geoms():
+def test_config_from_mjmodel_stores_force_margin_and_gap_from_mujoco_geoms():
     model = _model("""
         <mujoco>
           <worldbody>
@@ -191,7 +191,8 @@ def test_config_from_mjmodel_reads_effective_pair_gap_from_mujoco_geoms():
     assert torch.allclose(diffcoll.ctx.pair_margin, torch.tensor([0.17]))
     assert torch.allclose(diffcoll.ctx.pair_gap, torch.tensor([0.08]))
     assert torch.allclose(
-        diffcoll.ctx.pair_margin - diffcoll.ctx.pair_gap, torch.tensor([0.09])
+        diffcoll.ctx.pair_margin + diffcoll.ctx.pair_gap,
+        torch.tensor([0.25]),
     )
 
 
@@ -289,7 +290,7 @@ def test_explicit_geom_pair_uses_pair_gap():
 
     pair_params = _mesh_pair_params_from_mjmodel(model)
 
-    assert pair_params[_body_pair_ids(model, "a", "b")] == (0.04, 0.03)
+    assert pair_params[_body_pair_ids(model, "a", "b")] == pytest.approx((0.04, 0.03))
 
 
 def test_parent_child_body_pairs_are_filtered_by_default():

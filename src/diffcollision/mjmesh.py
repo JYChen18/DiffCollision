@@ -103,11 +103,13 @@ def _add_mesh_pair(
     if body1 == body2:
         return
     pair = tuple(sorted((int(body1), int(body2))))
-    includemargin = margin - gap
-    prev_margin, prev_includemargin = mesh_pair_params.get(pair, (0.0, float("-inf")))
+    detection_margin = margin + gap
+    prev_margin, prev_detection_margin = mesh_pair_params.get(
+        pair, (float("-inf"), float("-inf"))
+    )
     mesh_pair_params[pair] = (
         max(prev_margin, margin),
-        max(prev_includemargin, includemargin),
+        max(prev_detection_margin, detection_margin),
     )
 
 
@@ -117,9 +119,9 @@ def get_mesh_pair_params_from_mjmodel(model):
     DiffCollision stores one collision mesh per MuJoCo body, so this mirrors
     MuJoCo's geom-level contact filtering at body-pair granularity: a body pair
     is kept when at least one geom pair between those bodies can be checked. The
-    returned margin is the max effective margin over geom pairs for that body
-    pair, and the returned gap is chosen so ``margin - gap`` is the max effective
-    solver inclusion margin over geom pairs.
+    returned margin is the max force threshold over geom pairs for that body
+    pair, and the returned gap is chosen so ``margin + gap`` is the max detection
+    threshold over geom pairs.
     """
     body_to_geoms = {}
     for geom_id in range(model.ngeom):
@@ -183,12 +185,14 @@ def get_mesh_pair_params_from_mjmodel(model):
                 float(model.pair_gap[pair_id]),
             )
 
-    for (body1, body2), (margin, includemargin) in explicit_pair_params.items():
-        _add_mesh_pair(mesh_pair_params, body1, body2, margin, margin - includemargin)
+    for (body1, body2), (margin, detection_margin) in explicit_pair_params.items():
+        _add_mesh_pair(
+            mesh_pair_params, body1, body2, margin, detection_margin - margin
+        )
 
     mesh_pairs = list(mesh_pair_params.keys())
     pair_margins = [mesh_pair_params[pair][0] for pair in mesh_pairs]
     pair_gaps = [
-        mesh_pair_params[pair][0] - mesh_pair_params[pair][1] for pair in mesh_pairs
+        mesh_pair_params[pair][1] - mesh_pair_params[pair][0] for pair in mesh_pairs
     ]
     return mesh_pairs, pair_margins, pair_gaps

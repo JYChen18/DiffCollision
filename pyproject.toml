@@ -24,6 +24,7 @@ dependencies = [
     "cmeel-eigen",
     "cmeel-libomp",
     "dacite>=1.9.2",
+    "mujoco>=3.9.0",
     "pyyaml",
     "torch==2.5.0",
     "trimesh[easy]>=4.11.5",
@@ -35,7 +36,6 @@ dependencies = [
 [project.optional-dependencies]
 examples = [
     "pytorch-kinematics",
-    "mujoco",
     "usd-core"
 ]
 test = [
