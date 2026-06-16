@@ -8,7 +8,6 @@ from diffcollision.core.base import _BaseCollision, BaseCollisionConfig, DCConte
 from diffcollision.utils import (
     local_sample_w_dthre,
     global_sample_v_and_f,
-    torch_normalize_vector,
 )
 
 
@@ -178,6 +177,81 @@ def _local_sample(
     return ls_o[:, 0], ls_o[:, 1]
 
 
+def _rs1dist_wp_jacobian(Ti: torch.Tensor, wpj: torch.Tensor, lsi_o: torch.Tensor):
+    """Closed-form replacement for jacrev(wp_func) in RS1Dist backward."""
+    local_points = lsi_o[..., :3]
+    local_normals = lsi_o[..., 3:]
+    R = Ti[..., :3, :3]
+    t = Ti[..., :3, 3]
+
+    lsi = local_points @ R.transpose(-1, -2) + t.unsqueeze(-2)
+    lti = local_normals @ R.transpose(-1, -2)
+    pdiff = lsi - wpj.unsqueeze(-2)
+    pdist = pdiff.norm(dim=-1)
+    temp = pdist.std(dim=-1, correction=1).sqrt()
+    weight = torch.softmax(-pdist / temp.unsqueeze(-1), dim=-1)
+    ni = (weight.unsqueeze(-1) * lti).sum(dim=-2)
+
+    n_contact, n_local = pdist.shape
+    eye_n = torch.eye(n_local, device=Ti.device, dtype=Ti.dtype).expand(
+        n_contact, -1, -1
+    )
+    eye_3 = torch.eye(3, device=Ti.device, dtype=Ti.dtype)
+
+    pdist_mean = pdist.mean(dim=-1, keepdim=True)
+    temp_3d = temp[:, None, None]
+    J_logit_pdist = -eye_n / temp_3d + (
+        pdist[:, :, None] * (pdist - pdist_mean)[:, None, :]
+    ) / (2 * (n_local - 1) * temp_3d**5)
+    J_weight_logit = weight[:, :, None] * (eye_n - weight[:, None, :])
+    J_weight_pdist = J_weight_logit @ J_logit_pdist
+
+    unit_pdiff = torch.where(
+        pdist.unsqueeze(-1) > 0,
+        pdiff / pdist.clamp_min(torch.finfo(pdist.dtype).tiny).unsqueeze(-1),
+        torch.zeros_like(pdiff),
+    )
+    point_weight_pdist = torch.einsum("bir,bik->bkr", lsi, J_weight_pdist)
+    normal_weight_pdist = torch.einsum("bir,bik->bkr", lti, J_weight_pdist)
+
+    J_wp_lsi = (
+        weight[:, :, None, None] * eye_3
+        + point_weight_pdist[:, :, :, None] * unit_pdiff[:, :, None, :]
+    )
+    J_n_lsi = normal_weight_pdist[:, :, :, None] * unit_pdiff[:, :, None, :]
+    J_n_lti = weight[:, :, None, None] * eye_3
+
+    J_wp_T = torch.zeros(n_contact, 3, 4, 4, device=Ti.device, dtype=Ti.dtype)
+    J_n_T = torch.zeros_like(J_wp_T)
+    J_wp_T[:, :, :3, :3] = torch.einsum("bkop,bkq->bopq", J_wp_lsi, local_points)
+    J_wp_T[:, :, :3, 3] = J_wp_lsi.sum(dim=1)
+    J_n_T[:, :, :3, :3] = torch.einsum(
+        "bkop,bkq->bopq", J_n_lsi, local_points
+    ) + torch.einsum("bkop,bkq->bopq", J_n_lti, local_normals)
+    J_n_T[:, :, :3, 3] = J_n_lsi.sum(dim=1)
+
+    J_wp_wpj = -torch.einsum("bkr,bkc->brc", point_weight_pdist, unit_pdiff)
+    J_n_wpj = -torch.einsum("bkr,bkc->brc", normal_weight_pdist, unit_pdiff)
+    return J_wp_T, J_wp_wpj, J_n_T, J_n_wpj, ni
+
+
+def _normalize_vector_jacobian(v: torch.Tensor):
+    """Jacobian of torch_normalize_vector(v), including its clamped branch."""
+    norm = v.norm(dim=-1)
+    norm_min = 1e-12
+    eye = torch.eye(v.shape[-1], device=v.device, dtype=v.dtype).expand(
+        v.shape[:-1] + (v.shape[-1], v.shape[-1])
+    )
+    safe_norm = norm.clamp_min(norm_min)
+    unit = v / safe_norm.unsqueeze(-1)
+    J = (eye - unit.unsqueeze(-1) * unit.unsqueeze(-2)) / safe_norm[..., None, None]
+    return torch.where(
+        (norm > norm_min)[..., None, None],
+        J,
+        eye / norm_min,
+    )
+
+
 class RS1DistCollision(_BaseCollision):
     @staticmethod
     def backward(
@@ -235,19 +309,12 @@ class RS1DistCollision(_BaseCollision):
                 ctx.vis.ls1.append(ls1_vis.detach().cpu())
                 ctx.vis.ls2.append(ls2_vis.detach().cpu())
 
-        def wp_func(Ti, wpj, lsi_o):
-            lsi = lsi_o[:, :3] @ Ti[:3, :3].T + Ti[:3, 3]
-            pdist = (lsi - wpj).norm(dim=-1)
-            weight = torch.softmax(-pdist / pdist.std().sqrt(), dim=-1)
-            wpi = (weight.unsqueeze(-1) * lsi).sum(dim=-2)
-            lti = lsi_o[:, 3:] @ Ti[:3, :3].T
-            ni = (weight.unsqueeze(-1) * lti).sum(dim=-2)
-            return (wpi, ni), ni
-
-        jacb_fun = torch.vmap(torch.func.jacrev(wp_func, argnums=(0, 1), has_aux=True))
-
-        ((J_f_T1, J_f_wp2), (J_fn_T1, J_fn_wp2)), n1 = jacb_fun(T1, wp2, ls1_o)
-        ((J_g_T2, J_g_wp1), (J_gn_T2, J_gn_wp1)), n2 = jacb_fun(T2, wp1, ls2_o)
+        J_f_T1, J_f_wp2, J_fn_T1, J_fn_wp2, n1 = _rs1dist_wp_jacobian(
+            T1, wp2, ls1_o
+        )
+        J_g_T2, J_g_wp1, J_gn_T2, J_gn_wp1, n2 = _rs1dist_wp_jacobian(
+            T2, wp1, ls2_o
+        )
 
         help_eye = dc_ctx.ts.to(torch.eye(3)[None].expand(n_contact, -1, -1))
         J_wp1_T1 = torch.linalg.solve(
@@ -272,11 +339,8 @@ class RS1DistCollision(_BaseCollision):
             J_n1_T2 = torch.einsum("bij,bjkl->bikl", J_fn_wp2, J_wp2_T2)
             J_n2_T2 = J_gn_T2 + torch.einsum("bij,bjkl->bikl", J_gn_wp1, J_wp1_T2)
 
-            def normal_func(n1i, n2i):
-                return torch_normalize_vector(n1i - n2i)
-
-            normal_jacb_fun = torch.vmap(torch.func.jacrev(normal_func, argnums=(0, 1)))
-            J_n_n1, J_n_n2 = normal_jacb_fun(n1, n2)
+            J_n_n1 = _normalize_vector_jacobian(n1 - n2)
+            J_n_n2 = -J_n_n1
             J_n_T1 = torch.einsum("bij,bjkl->bikl", J_n_n1, J_n1_T1) + torch.einsum(
                 "bij, bjkl -> bikl", J_n_n2, J_n2_T1
             )
